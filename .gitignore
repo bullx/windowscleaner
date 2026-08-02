@@ -1,0 +1,24 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.spec.bak
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+Thumbs.db
+Desktop.ini
+
+# Local tooling
+_fetch_*.py
+*.log
