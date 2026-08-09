@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from typing import Optional
 
 import click
@@ -18,9 +19,14 @@ from windowscleaner.cleaner import CleanReport, Cleaner, select_modules
 from windowscleaner.disclaimer import DISCLAIMER_FULL, DISCLAIMER_SHORT
 from windowscleaner.modules import all_modules
 from windowscleaner.utils.admin import is_admin, relaunch_as_admin
+from windowscleaner.utils.privacy_undo import load_undo, undo_all
+from windowscleaner.utils.report_export import save_report
 from windowscleaner.utils.size import format_bytes
+from windowscleaner.utils.windows_info import edition_banner_text
 
 console = Console(legacy_windows=False, soft_wrap=True)
+
+PROFILE_CHOICES = ["safe", "standard", "privacy", "oem", "disk", "new_pc", "full"]
 
 
 def _risk_style(risk: str) -> str:
@@ -42,6 +48,7 @@ def _print_banner() -> None:
         style="bold green" if admin else "bold yellow",
     )
     status.append("\n")
+    status.append(edition_banner_text() + "\n", style="dim")
     status.append(DISCLAIMER_SHORT, style="dim")
     console.print(Panel(status, box=box.ROUNDED, border_style="cyan"))
 
@@ -234,14 +241,15 @@ def doctor_cmd() -> None:
 @main.command("scan")
 @click.option(
     "--profile",
-    type=click.Choice(["safe", "standard", "privacy", "oem", "full"], case_sensitive=False),
+    type=click.Choice(PROFILE_CHOICES, case_sensitive=False),
     default="standard",
     show_default=True,
     help="Which module set to include.",
 )
 @click.option("--only", default=None, help="Comma-separated module IDs.")
 @click.option("--exclude", default=None, help="Comma-separated module IDs to skip.")
-def scan_cmd(profile: str, only: Optional[str], exclude: Optional[str]) -> None:
+@click.option("--export", "export_path", default=None, help="Write JSON/TXT report to this path.")
+def scan_cmd(profile: str, only: Optional[str], exclude: Optional[str], export_path: Optional[str]) -> None:
     """Scan for reclaimable junk and privacy drift (no changes)."""
     _print_banner()
     mods = select_modules(only=_parse_csv(only), exclude=_parse_csv(exclude), profile=profile.lower())
@@ -253,12 +261,15 @@ def scan_cmd(profile: str, only: Optional[str], exclude: Optional[str]) -> None:
     cleaner = Cleaner(mods)
     report = _run_with_progress(lambda cb: cleaner.scan(cb))
     _render_report(report, mode="scan")
+    if export_path:
+        path = save_report(report, mode="scan", path=Path(export_path))
+        console.print(f"\n[green]Exported[/green] {path}")
 
 
 @main.command("clean")
 @click.option(
     "--profile",
-    type=click.Choice(["safe", "standard", "privacy", "oem", "full"], case_sensitive=False),
+    type=click.Choice(PROFILE_CHOICES, case_sensitive=False),
     default="standard",
     show_default=True,
     help="Which module set to include.",
@@ -267,12 +278,14 @@ def scan_cmd(profile: str, only: Optional[str], exclude: Optional[str]) -> None:
 @click.option("--exclude", default=None, help="Comma-separated module IDs to skip.")
 @click.option("--dry-run", is_flag=True, help="Show what would happen without changing anything.")
 @click.option("-y", "--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.option("--export", "export_path", default=None, help="Write JSON/TXT report to this path.")
 def clean_cmd(
     profile: str,
     only: Optional[str],
     exclude: Optional[str],
     dry_run: bool,
     yes: bool,
+    export_path: Optional[str],
 ) -> None:
     """Clean junk / apply privacy hardening."""
     _print_banner()
@@ -282,6 +295,11 @@ def clean_cmd(
         sys.exit(1)
 
     console.print(f"Profile: [bold]{profile}[/bold]  Modules: {', '.join(m.id for m in mods)}")
+    admin_needed = [m.label for m in mods if m.requires_admin]
+    if admin_needed and not is_admin():
+        console.print("[yellow]Modules that typically need Administrator:[/yellow]")
+        for n in admin_needed:
+            console.print(f"  • {n}")
     if dry_run:
         console.print("[yellow]Dry-run mode - no changes will be made.[/yellow]\n")
     else:
@@ -309,6 +327,13 @@ def clean_cmd(
 
     report = _run_with_progress(lambda cb: cleaner.clean(dry_run=dry_run, progress=cb))
     _render_report(report, mode="clean")
+    if export_path:
+        path = save_report(
+            report,
+            mode="clean",
+            path=Path(export_path),
+        )
+        console.print(f"\n[green]Exported[/green] {path}")
 
     if not is_admin() and any(m.requires_admin for m in mods):
         console.print(
@@ -316,6 +341,30 @@ def clean_cmd(
             "Re-run: [bold]python -m windowscleaner --elevate clean "
             f"--profile {profile} -y[/bold]"
         )
+
+
+@main.command("undo-privacy")
+@click.option("--dry-run", is_flag=True, help="Show what would be restored.")
+@click.option("-y", "--yes", is_flag=True, help="Skip confirmation.")
+def undo_privacy_cmd(dry_run: bool, yes: bool) -> None:
+    """Restore previous privacy registry values recorded during Clean."""
+    _print_banner()
+    data = load_undo()
+    entries = data.get("entries") or []
+    if not entries:
+        console.print("[yellow]No privacy undo history found.[/yellow]")
+        sys.exit(0)
+    console.print(f"Recorded changes: [bold]{len(entries)}[/bold]")
+    for e in entries[:20]:
+        console.print(f"  • {e.get('label') or e.get('id')} (was {e.get('previous')!r})")
+    if not dry_run and not yes:
+        if not click.confirm("Restore these values?", default=False):
+            console.print("Aborted.")
+            sys.exit(0)
+    ok, failed, messages = undo_all(dry_run=dry_run)
+    for m in messages:
+        console.print(m)
+    console.print(f"\nOk: {ok}  Failed/skipped: {failed}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "windowscleaner"
+version = "1.2.0"
+description = "Windows 10/11 disk cleanup, privacy hardening, and optional bloatware removal"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Windows Cleaner contributors" }]
+keywords = ["windows", "cleanup", "privacy", "telemetry", "debloat"]
+dependencies = [
+    "rich>=13.7.0",
+    "click>=8.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+windowscleaner = "windowscleaner.__main__:_entry"
+
+[tool.setuptools.packages.find]
+include = ["windowscleaner*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

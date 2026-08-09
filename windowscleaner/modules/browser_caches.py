@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
 from windowscleaner.utils.fs import clear_directory_contents, merge_results
 from windowscleaner.utils.size import path_size
 
@@ -63,9 +63,16 @@ class BrowserCachesModule(CleanModule):
             )
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         if dry_run:
             result = self.scan(progress)
+            result.items = filter_items(result.items, only_ids)
             result.dry_run = True
             result.bytes_freed = result.bytes_estimate
             for item in result.items:
@@ -75,6 +82,8 @@ class BrowserCachesModule(CleanModule):
         result = ModuleResult(module_id=self.id, label=self.label, dry_run=False)
         results = []
         for item_id, label, path in _targets():
+            if not allow_item(item_id, only_ids):
+                continue
             try:
                 if not path.exists():
                     continue

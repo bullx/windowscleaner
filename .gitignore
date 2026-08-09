@@ -21,4 +21,8 @@ Desktop.ini
 
 # Local tooling
 _fetch_*.py
+_patch_*.py
 *.log
+.pytest_cache/
+.coverage
+htmlcov/

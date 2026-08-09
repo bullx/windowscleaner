@@ -6,7 +6,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
 from windowscleaner.utils.fs import clear_directory_contents, delete_path, merge_results
 from windowscleaner.utils.size import path_size
 
@@ -122,11 +122,18 @@ class CachesModule(CleanModule):
             )
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         from windowscleaner.utils.admin import is_admin
 
         if dry_run:
             result = self.scan(progress)
+            result.items = filter_items(result.items, only_ids)
             result.dry_run = True
             result.bytes_freed = result.bytes_estimate
             for item in result.items:
@@ -139,6 +146,8 @@ class CachesModule(CleanModule):
         flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
 
         for item_id, label, path, needs_admin in _targets():
+            if not allow_item(item_id, only_ids):
+                continue
             try:
                 exists = path.exists()
             except OSError:

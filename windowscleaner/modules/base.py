@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable
+from typing import Callable, Collection
 
 
 class Risk(Enum):
@@ -28,6 +28,8 @@ class CleanItem:
     status: str = ""
     # What the user should do next
     next_step: str = ""
+    # Module risk echoed for GUI badges (optional; filled by enrich / GUI)
+    risk: str = ""
 
 
 @dataclass
@@ -46,6 +48,18 @@ class ModuleResult:
 
 
 ProgressCb = Callable[[str], None]
+OnlyIds = Collection[str] | None
+
+
+def allow_item(item_id: str, only_ids: OnlyIds) -> bool:
+    """True when Clean should process this item (None = all items)."""
+    return only_ids is None or item_id in only_ids
+
+
+def filter_items(items: list[CleanItem], only_ids: OnlyIds) -> list[CleanItem]:
+    if only_ids is None:
+        return items
+    return [i for i in items if i.id in only_ids]
 
 
 class CleanModule(ABC):
@@ -61,5 +75,11 @@ class CleanModule(ABC):
         ...
 
     @abstractmethod
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         ...

@@ -5,7 +5,7 @@ from __future__ import annotations
 import ctypes
 from ctypes import wintypes
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
 
 
 SHERB_NOCONFIRMATION = 0x00000001
@@ -37,8 +37,15 @@ class RecycleBinModule(CleanModule):
             )
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         result = self.scan(progress)
+        result.items = filter_items(result.items, only_ids)
         result.dry_run = dry_run
         if not result.items:
             return result

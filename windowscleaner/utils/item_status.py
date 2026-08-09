@@ -28,6 +28,7 @@ MODULE_KIND: dict[str, str] = {
     "bloatware": "sticky",
     "bloatware_oem": "sticky",
     "perf_services": "sticky",
+    "startup_apps": "sticky",
 }
 
 # Modules where nearly every fix needs elevation (sticky policy / services / uninstall)

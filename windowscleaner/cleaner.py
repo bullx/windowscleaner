@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from windowscleaner.modules import all_modules
-from windowscleaner.modules.base import CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk
 from windowscleaner.modules.item_info import enrich_result
 from windowscleaner.utils.admin import is_admin
 from windowscleaner.utils.item_status import (
@@ -56,16 +55,34 @@ def select_modules(
     """
     Profiles:
       safe      - SAFE risk only
-      standard  - default modules (space + privacy + telemetry services; no bloat/OEM/perf)
+      standard  - default modules (space + privacy + telemetry; no opt-in aggressives)
       privacy   - privacy hardening + tracking wipe + telemetry services/tasks
       oem       - bloatware AppX + OEM/winget module only
+      disk      - space reclaim (temps, caches, logs, recycle)
+      new_pc    - privacy + tracking + telemetry + bloat + OEM (new laptop intent)
       full      - everything except optional perf_services (SysMain/WSearch stay manual)
     """
-    from windowscleaner.modules import OPT_IN_MODULE_IDS
+    from windowscleaner.modules import OPT_IN_MODULE_IDS, all_modules
 
     only_set = {x.strip() for x in (only or []) if x.strip()}
     exclude_set = {x.strip() for x in (exclude or []) if x.strip()}
     selected: list[CleanModule] = []
+
+    disk_ids = {
+        "temp_files",
+        "recycle_bin",
+        "browser_caches",
+        "gpu_caches",
+        "caches",
+        "logs",
+    }
+    new_pc_ids = {
+        "privacy",
+        "tracking",
+        "telemetry_services",
+        "bloatware",
+        "bloatware_oem",
+    }
 
     for mod in all_modules():
         if only_set:
@@ -85,8 +102,13 @@ def select_modules(
         elif profile == "oem":
             if mod.id in {"bloatware", "bloatware_oem"}:
                 selected.append(mod)
+        elif profile == "disk":
+            if mod.id in disk_ids:
+                selected.append(mod)
+        elif profile == "new_pc":
+            if mod.id in new_pc_ids:
+                selected.append(mod)
         elif profile == "full":
-            # Include bloatware + OEM; leave controversial perf services unchecked
             if mod.id != "perf_services":
                 selected.append(mod)
         else:  # standard
@@ -110,6 +132,9 @@ class Cleaner:
                 progress(f"Scanning: {mod.label}")
             try:
                 result = enrich_result(mod.scan(progress))
+                for item in result.items:
+                    if not item.risk:
+                        item.risk = mod.risk.value
                 annotate_scan_result(result, history)
                 report.results.append(result)
             except Exception as e:
@@ -118,20 +143,37 @@ class Cleaner:
                 report.results.append(failed)
         return report
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> CleanReport:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: dict[str, set[str]] | None = None,
+    ) -> CleanReport:
+        """
+        only_ids: optional map module_id -> set of item ids to clean.
+        None means clean all items in each selected module.
+        """
         report = CleanReport(dry_run=dry_run, admin=is_admin())
         cleaned_mods: list[CleanModule] = []
 
         for mod in self.modules:
             if progress:
                 progress(f"{'Dry-run' if dry_run else 'Cleaning'}: {mod.label}")
+            mod_only: OnlyIds = None
+            if only_ids is not None:
+                mod_only = only_ids.get(mod.id, set())
             try:
-                result = enrich_result(mod.clean(dry_run=dry_run, progress=progress))
+                result = enrich_result(
+                    mod.clean(dry_run=dry_run, progress=progress, only_ids=mod_only)
+                )
+                for item in result.items:
+                    if not item.risk:
+                        item.risk = mod.risk.value
                 annotate_clean_result(result, dry_run=dry_run, admin=report.admin)
                 report.results.append(result)
                 cleaned_mods.append(mod)
 
-                # Track modules that could not apply anything without Admin
                 if (
                     not dry_run
                     and not report.admin

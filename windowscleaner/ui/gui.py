@@ -8,7 +8,7 @@ import queue
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, ttk
 from typing import Callable
 
 from windowscleaner import __app_name__, __version__
@@ -17,7 +17,10 @@ from windowscleaner.disclaimer import DISCLAIMER_FULL, DISCLAIMER_SHORT
 from windowscleaner.modules import all_modules
 from windowscleaner.modules.base import CleanModule, Risk
 from windowscleaner.utils.admin import is_admin, relaunch_as_admin
+from windowscleaner.utils.privacy_undo import load_undo, undo_all
+from windowscleaner.utils.report_export import save_report
 from windowscleaner.utils.size import format_bytes
+from windowscleaner.utils.windows_info import edition_banner_text
 
 # Light theme tokens (readable Windows Settings-like palette)
 C = {
@@ -40,18 +43,22 @@ C = {
 
 # Results table columns: id -> (heading, default_width, min_width)
 RESULT_COLUMNS: dict[str, tuple[str, int, int]] = {
+    "include": ("Clean?", 64, 56),
     "status": ("Status", 130, 90),
-    "next_step": ("What to do", 260, 120),
+    "next_step": ("What to do", 240, 120),
+    "risk": ("Risk", 90, 60),
     "module": ("Module", 130, 80),
     "item": ("Item", 170, 90),
     "size": ("Size", 85, 60),
-    "effect": ("What it does", 240, 120),
-    "repercussions": ("Repercussions", 240, 120),
-    "detail": ("Path / detail", 260, 120),
+    "effect": ("What it does", 220, 120),
+    "repercussions": ("Repercussions", 220, 120),
+    "detail": ("Path / detail", 240, 120),
 }
 DEFAULT_VISIBLE_COLUMNS = [
+    "include",
     "status",
     "next_step",
+    "risk",
     "module",
     "item",
     "size",
@@ -62,11 +69,19 @@ DEFAULT_VISIBLE_COLUMNS = [
 PROFILE_IDS = {
     "safe": lambda m: m.risk == Risk.SAFE and m.default_enabled,
     "standard": lambda m: m.default_enabled
-    and m.id not in {"bloatware", "bloatware_oem", "perf_services"},
+    and m.id not in {"bloatware", "bloatware_oem", "perf_services", "startup_apps"},
     "privacy": lambda m: m.id in {"privacy", "tracking", "telemetry_services"},
     "oem": lambda m: m.id in {"bloatware", "bloatware_oem"},
+    "disk": lambda m: m.id
+    in {"temp_files", "recycle_bin", "browser_caches", "gpu_caches", "caches", "logs"},
+    "new_pc": lambda m: m.id
+    in {"privacy", "tracking", "telemetry_services", "bloatware", "bloatware_oem"},
     "full": lambda m: m.id != "perf_services",
 }
+
+# Plain ASCII — Unicode ☑/☐ often renders wrong / clipped in ttk Treeview on Windows
+CHECK_ON = "[x]"
+CHECK_OFF = "[ ]"
 
 HOW_IT_WORKS = """How cleanup actually works (all public Windows mechanisms)
 
@@ -91,7 +106,11 @@ What each category does:
 
 5) Bloatware (opt-in) - Remove-AppxPackage + Remove-AppxProvisionedPackage (Win11Debloat-style list)
 6) OEM / Win32 (opt-in) - OEM AppX families + winget uninstall (SupportAssist, Vantage, Wolf, …)
-7) Optional perf services (opt-in, not in Full) - SysMain / WSearch disable
+7) Startup programs (opt-in) - HKCU/HKLM Run keys + Startup folder shortcuts
+8) Optional perf services (opt-in, not in Full) - SysMain / WSearch disable
+
+After Scan: toggle Clean? ([x] / [ ]) per row so Clean only touches what you keep checked.
+Export report saves JSON/TXT for support. Undo Privacy restores prior registry values when recorded.
 
 Safety notes from the community:
   - Prefer Scan + Dry-run first
@@ -122,7 +141,9 @@ class WindowsCleanerApp(tk.Tk):
         self._busy = False
         self._queue: queue.Queue = queue.Queue()
         self._last_report: CleanReport | None = None
+        self._last_mode: str = "scan"
         self._row_data: dict[str, dict[str, str]] = {}
+        self._item_keys: dict[str, tuple[str, str]] = {}  # tree iid -> (module_id, item_id)
         self._visible_columns = self._load_visible_columns()
         self._column_widths = self._load_column_widths()
 
@@ -213,8 +234,9 @@ class WindowsCleanerApp(tk.Tk):
             background=C["card"],
             foreground=C["text"],
             fieldbackground=C["card"],
-            rowheight=26,
-            borderwidth=0,
+            rowheight=28,
+            borderwidth=1,
+            relief="solid",
             font=("Segoe UI", 9),
         )
         style.configure(
@@ -222,12 +244,18 @@ class WindowsCleanerApp(tk.Tk):
             background="#e5e7eb",
             foreground=C["text"],
             font=("Segoe UI", 9, "bold"),
-            relief="flat",
+            relief="raised",
+            borderwidth=1,
         )
         style.map(
             "Treeview",
             background=[("selected", C["select"])],
             foreground=[("selected", C["text"])],
+        )
+        style.map(
+            "Treeview.Heading",
+            relief=[("active", "groove"), ("pressed", "sunken")],
+            background=[("active", "#d1d5db")],
         )
         style.configure(
             "Horizontal.TProgressbar",
@@ -262,6 +290,13 @@ class WindowsCleanerApp(tk.Tk):
             text="Step through: choose what to clean  →  scan  →  dry-run  →  clean. Aggressive items stay off until you enable them.",
             style="Sub.TLabel",
         ).pack(anchor=tk.W, pady=(0, 4))
+        self.edition_banner = ttk.Label(
+            root,
+            text=edition_banner_text(),
+            style="Sub.TLabel",
+            wraplength=900,
+        )
+        self.edition_banner.pack(anchor=tk.W, pady=(0, 4))
         ttk.Label(
             root,
             text=DISCLAIMER_SHORT,
@@ -294,7 +329,7 @@ class WindowsCleanerApp(tk.Tk):
         ).pack(anchor=tk.W, pady=(0, 8))
 
         profile_row = ttk.Frame(parent, style="Card.TFrame")
-        profile_row.pack(fill=tk.X, pady=(0, 8))
+        profile_row.pack(fill=tk.X, pady=(0, 4))
         for name, key in (
             ("Safe", "safe"),
             ("Standard", "standard"),
@@ -305,6 +340,15 @@ class WindowsCleanerApp(tk.Tk):
             ttk.Button(profile_row, text=name, command=lambda k=key: self._apply_profile(k), width=9).pack(
                 side=tk.LEFT, padx=(0, 4)
             )
+        intent_row = ttk.Frame(parent, style="Card.TFrame")
+        intent_row.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(intent_row, text="Intent:", style="CardSub.TLabel").pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(intent_row, text="Free disk", command=lambda: self._apply_profile("disk"), width=10).pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
+        ttk.Button(
+            intent_row, text="New laptop", command=lambda: self._apply_profile("new_pc"), width=10
+        ).pack(side=tk.LEFT)
 
         box = ttk.LabelFrame(parent, text="Modules", padding=8)
         box.pack(fill=tk.BOTH, expand=True)
@@ -338,7 +382,7 @@ class WindowsCleanerApp(tk.Tk):
         for mod in self._modules:
             var = tk.BooleanVar(
                 value=mod.default_enabled
-                and mod.id not in {"bloatware", "bloatware_oem", "perf_services"}
+                and mod.id not in {"bloatware", "bloatware_oem", "perf_services", "startup_apps"}
             )
             self._vars[mod.id] = var
 
@@ -396,6 +440,15 @@ class WindowsCleanerApp(tk.Tk):
         )
         self.clean_btn.pack(fill=tk.X, pady=3)
 
+        sel_row = ttk.Frame(parent, style="Card.TFrame")
+        sel_row.pack(fill=tk.X, pady=(6, 0))
+        ttk.Button(sel_row, text="Include all rows", command=lambda: self._set_all_includes(True)).pack(
+            side=tk.LEFT, padx=(0, 4)
+        )
+        ttk.Button(sel_row, text="Include none", command=lambda: self._set_all_includes(False)).pack(
+            side=tk.LEFT
+        )
+
         self.restore_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(
             parent,
@@ -412,6 +465,10 @@ class WindowsCleanerApp(tk.Tk):
         ttk.Separator(parent, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         self.elevate_btn = ttk.Button(parent, text="Restart as Administrator", command=self._on_elevate)
         self.elevate_btn.pack(fill=tk.X, pady=2)
+        self.export_btn = ttk.Button(parent, text="Export last report…", command=self._on_export)
+        self.export_btn.pack(fill=tk.X, pady=2)
+        self.undo_privacy_btn = ttk.Button(parent, text="Undo privacy changes…", command=self._on_undo_privacy)
+        self.undo_privacy_btn.pack(fill=tk.X, pady=2)
 
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
         self.progress.pack(fill=tk.X, pady=(10, 4))
@@ -435,7 +492,7 @@ class WindowsCleanerApp(tk.Tk):
         )
         ttk.Label(
             parent,
-            text="Drag column edges to resize. Shift+mouse wheel scrolls sideways. Customize columns to show/hide.",
+            text="Drag column edges to resize. Shift+mouse wheel scrolls sideways. Click Clean? [x]/[ ] to toggle rows.",
             style="Sub.TLabel",
         ).pack(anchor=tk.W, pady=(0, 6))
 
@@ -456,16 +513,23 @@ class WindowsCleanerApp(tk.Tk):
             self.tree.heading(col, text=title, command=lambda c=col: self._sort_by_column(c))
             saved_w = self._column_widths.get(col, width)
             # stretch=False is required for horizontal scrolling to work
+            if col == "include":
+                anchor = tk.CENTER
+            elif col == "size":
+                anchor = tk.E
+            else:
+                anchor = tk.W
             self.tree.column(
                 col,
                 width=saved_w,
                 minwidth=min_w,
                 stretch=False,
-                anchor=tk.E if col == "size" else tk.W,
+                anchor=anchor,
             )
 
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
         self.tree.bind("<Double-1>", self._on_tree_double_click)
+        self.tree.bind("<Button-1>", self._on_tree_click_include, add="+")
         self.tree.bind("<Shift-MouseWheel>", self._on_tree_shift_wheel)
         self.tree.bind("<ButtonRelease-1>", self._on_column_resize_done)
 
@@ -555,9 +619,9 @@ class WindowsCleanerApp(tk.Tk):
         if isinstance(cols, list):
             filtered = [c for c in cols if c in RESULT_COLUMNS]
             # Ensure new status columns appear even if old prefs lack them
-            for required in ("status", "next_step"):
+            for required in ("include", "status", "next_step", "risk"):
                 if required not in filtered and required in RESULT_COLUMNS:
-                    filtered.insert(0 if required == "status" else 1, required)
+                    filtered.insert(0, required)
             if filtered:
                 return filtered
         return list(DEFAULT_VISIBLE_COLUMNS)
@@ -570,6 +634,9 @@ class WindowsCleanerApp(tk.Tk):
             try:
                 w = int(widths.get(col, default_w))
             except (TypeError, ValueError):
+                w = default_w
+            # Old prefs used a too-narrow Include column (hard to see/drag)
+            if col == "include" and w < min_w:
                 w = default_w
             out[col] = max(min_w, w)
         return out
@@ -585,12 +652,18 @@ class WindowsCleanerApp(tk.Tk):
         for col in RESULT_COLUMNS:
             title, default_w, min_w = RESULT_COLUMNS[col]
             width = int(self.tree.column(col, "width") or self._column_widths.get(col, default_w))
+            if col == "include":
+                anchor = tk.CENTER
+            elif col == "size":
+                anchor = tk.E
+            else:
+                anchor = tk.W
             self.tree.column(
                 col,
                 width=width,
                 minwidth=min_w,
                 stretch=False,
-                anchor=tk.E if col == "size" else tk.W,
+                anchor=anchor,
             )
         self._save_prefs()
 
@@ -637,7 +710,7 @@ class WindowsCleanerApp(tk.Tk):
 
         def select_minimal() -> None:
             for c, v in vars_map.items():
-                v.set(c in {"status", "next_step", "module", "item", "size"})
+                v.set(c in {"include", "status", "next_step", "risk", "module", "item", "size"})
 
         btns = ttk.Frame(win)
         btns.pack(fill=tk.X, padx=12, pady=12)
@@ -699,7 +772,9 @@ class WindowsCleanerApp(tk.Tk):
             data = {keys[i]: vals[i] for i in range(min(len(keys), len(vals)))}
         text = (
             f"Status: {data.get('status', '')}\n"
-            f"What to do: {data.get('next_step', '')}\n\n"
+            f"What to do: {data.get('next_step', '')}\n"
+            f"Risk: {data.get('risk', '')}\n"
+            f"Include: {data.get('include', '')}\n\n"
             f"Module: {data.get('module', '')}\n"
             f"Item: {data.get('item', '')}\n"
             f"Size: {data.get('size', '')}\n\n"
@@ -786,13 +861,136 @@ class WindowsCleanerApp(tk.Tk):
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
         state = tk.DISABLED if busy else tk.NORMAL
-        for btn in (self.scan_btn, self.dry_btn, self.clean_btn, self.elevate_btn):
+        for btn in (
+            self.scan_btn,
+            self.dry_btn,
+            self.clean_btn,
+            self.elevate_btn,
+            self.export_btn,
+            self.undo_privacy_btn,
+        ):
             btn.configure(state=state)
         if busy:
             self.progress.start(12)
         else:
             self.progress.stop()
             self.progress_label.configure(text="Ready")
+
+    def _on_tree_click_include(self, event: tk.Event) -> None:
+        """Toggle Include checkbox when user clicks that column."""
+        if self._busy:
+            return
+        region = self.tree.identify_region(event.x, event.y)
+        if region != "cell":
+            return
+        col = self.tree.identify_column(event.x)
+        # displaycolumns-aware: map #n to column id
+        display = list(self.tree.cget("displaycolumns"))
+        if not display or display == ["#all"]:
+            display = list(RESULT_COLUMNS.keys())
+        try:
+            col_index = int(col.replace("#", "")) - 1
+        except ValueError:
+            return
+        if col_index < 0 or col_index >= len(display):
+            return
+        if display[col_index] != "include":
+            return
+        row = self.tree.identify_row(event.y)
+        if not row or row not in self._item_keys:
+            return
+        data = self._row_data.get(row)
+        if not data:
+            return
+        on = data.get("include") == CHECK_ON
+        data["include"] = CHECK_OFF if on else CHECK_ON
+        values = tuple(data.get(c, "") for c in RESULT_COLUMNS)
+        self.tree.item(row, values=values)
+
+    def _set_all_includes(self, included: bool) -> None:
+        mark = CHECK_ON if included else CHECK_OFF
+        for iid, data in self._row_data.items():
+            if iid not in self._item_keys:
+                continue
+            data["include"] = mark
+            self.tree.item(iid, values=tuple(data.get(c, "") for c in RESULT_COLUMNS))
+
+    def _collect_only_ids(self) -> dict[str, set[str]] | None:
+        """
+        If the table has selectable scan rows, return module_id -> item ids that are Included.
+        None = no per-item filter (clean entire selected modules).
+        """
+        if not self._item_keys:
+            return None
+        mapping: dict[str, set[str]] = {}
+        for iid, (mod_id, item_id) in self._item_keys.items():
+            data = self._row_data.get(iid) or {}
+            if data.get("include") != CHECK_ON:
+                continue
+            mapping.setdefault(mod_id, set()).add(item_id)
+        return mapping
+
+    def _on_export(self) -> None:
+        if self._last_report is None:
+            messagebox.showinfo(__app_name__, "Run Scan or Clean first, then export.")
+            return
+        path = filedialog.asksaveasfilename(
+            title="Export report",
+            defaultextension=".json",
+            filetypes=[
+                ("JSON report", "*.json"),
+                ("Text report", "*.txt"),
+                ("All files", "*.*"),
+            ],
+            initialfile=f"windowscleaner-{self._last_mode}.json",
+        )
+        if not path:
+            return
+        out = Path(path)
+        try:
+            saved = save_report(
+                self._last_report,
+                mode=self._last_mode,
+                path=out,
+                as_json=out.suffix.lower() == ".json",
+            )
+            self._log(f"Exported report → {saved}")
+            messagebox.showinfo(__app_name__, f"Report saved:\n{saved}")
+        except OSError as e:
+            messagebox.showerror(__app_name__, f"Export failed: {e}")
+
+    def _on_undo_privacy(self) -> None:
+        data = load_undo()
+        entries = data.get("entries") or []
+        if not entries:
+            messagebox.showinfo(
+                __app_name__,
+                "No privacy undo history yet.\n\n"
+                "After a successful Privacy Clean, previous DWORD values are stored under "
+                "%LOCALAPPDATA%\\WindowsCleaner\\privacy_undo.json.",
+            )
+            return
+        preview = "\n".join(
+            f"  • {e.get('label') or e.get('id')} (was {e.get('previous')!r})"
+            for e in entries[:15]
+        )
+        more = f"\n  … and {len(entries) - 15} more" if len(entries) > 15 else ""
+        if not messagebox.askyesno(
+            __app_name__,
+            "Restore previous privacy registry values from the last Clean(s)?\n\n"
+            f"{len(entries)} recorded change(s):\n{preview}{more}\n\n"
+            "HKLM / Policies keys need Administrator. Continue?",
+            icon=messagebox.WARNING,
+        ):
+            return
+        ok, failed, messages = undo_all(dry_run=False)
+        for m in messages[:40]:
+            self._log(m)
+        messagebox.showinfo(
+            __app_name__,
+            f"Privacy undo finished.\n\nRestored/ok: {ok}\nFailed/skipped: {failed}\n\n"
+            "See Activity log for detail. Run Scan to verify.",
+        )
 
     def _log(self, msg: str) -> None:
         self.log.configure(state=tk.NORMAL)
@@ -804,15 +1002,25 @@ class WindowsCleanerApp(tk.Tk):
         for item in self.tree.get_children():
             self.tree.delete(item)
         self._row_data.clear()
+        self._item_keys.clear()
 
-    def _insert_row(self, data: dict[str, str]) -> None:
+    def _insert_row(
+        self,
+        data: dict[str, str],
+        *,
+        module_id: str | None = None,
+        item_id: str | None = None,
+    ) -> None:
         # Always store values in RESULT_COLUMNS order so displaycolumns can hide safely
         values = tuple(data.get(col, "") for col in RESULT_COLUMNS)
         iid = self.tree.insert("", tk.END, values=values)
         self._row_data[iid] = data
+        if module_id and item_id:
+            self._item_keys[iid] = (module_id, item_id)
 
     def _fill_report(self, report: CleanReport, mode: str) -> None:
         self._last_report = report
+        self._last_mode = mode
         self._clear_tree()
         for result in report.results:
             if not result.items and not result.actions and not result.errors:
@@ -820,24 +1028,31 @@ class WindowsCleanerApp(tk.Tk):
             if result.items:
                 for item in result.items:
                     size = format_bytes(item.bytes_estimate) if item.bytes_estimate else "-"
+                    risk = (item.risk or "").upper() or "-"
                     self._insert_row(
                         {
+                            "include": CHECK_ON,
                             "status": item.status or "-",
                             "next_step": item.next_step or "-",
+                            "risk": risk,
                             "module": result.label,
                             "item": item.label,
                             "size": size,
                             "effect": item.effect or "-",
                             "repercussions": item.repercussions or "-",
                             "detail": item.detail,
-                        }
+                        },
+                        module_id=result.module_id,
+                        item_id=item.id,
                     )
             else:
                 for action in result.actions[:20]:
                     self._insert_row(
                         {
+                            "include": "",
                             "status": "-",
                             "next_step": "-",
+                            "risk": "-",
                             "module": result.label,
                             "item": action,
                             "size": "-",
@@ -850,8 +1065,10 @@ class WindowsCleanerApp(tk.Tk):
             for err in result.errors[:10]:
                 self._insert_row(
                     {
+                        "include": "",
                         "status": "Error",
                         "next_step": "See Activity log / elevate if Access Denied",
+                        "risk": "-",
                         "module": result.label,
                         "item": "ERROR",
                         "size": "-",
@@ -865,8 +1082,10 @@ class WindowsCleanerApp(tk.Tk):
         for skipped in report.skipped_modules:
             self._insert_row(
                 {
+                    "include": "",
                     "status": "Needs Admin",
                     "next_step": "Restart as Administrator → Clean",
+                    "risk": "-",
                     "module": "Skipped",
                     "item": skipped,
                     "size": "-",
@@ -878,10 +1097,12 @@ class WindowsCleanerApp(tk.Tk):
             self._log(f"Skipped: {skipped}")
 
         if mode == "scan":
+            n_inc = len(self._item_keys)
             self.summary_var.set(
                 f"Found {report.item_count} item(s)  |  "
                 f"Estimated reclaimable: {format_bytes(report.bytes_estimate)}  |  "
-                f"Errors: {report.error_count}"
+                f"Errors: {report.error_count}  |  "
+                f"Click Clean? ([x] / [ ]) to choose what Clean will touch ({n_inc} selectable)"
             )
         else:
             label = "Would free" if report.dry_run else "Freed"
@@ -947,10 +1168,21 @@ class WindowsCleanerApp(tk.Tk):
                             "Failed — Needs Admin", 0
                         )
                         still = counts.get("Still present", 0)
+                        fixed_labels: list[str] = []
+                        for r in report.results:
+                            for item in r.items:
+                                if item.status == "Fixed" and len(fixed_labels) < 8:
+                                    fixed_labels.append(f"  • {item.label}")
+                        fixed_block = (
+                            "\n".join(fixed_labels) + ("\n  …" if fixed > len(fixed_labels) else "")
+                            if fixed_labels
+                            else "  (none)"
+                        )
                         self.summary_var.set(
                             f"Clean + verify: Fixed {fixed}, Not fixed/Needs Admin {not_fixed}, "
-                            f"Still present {still}. Actions ~{applied}, errors {failed}, "
-                            f"admin-blocked modules {skipped}. Statuses — {status_txt}"
+                            f"Still present {still}. Freed {format_bytes(report.bytes_freed)}. "
+                            f"Actions ~{applied}, errors {failed}, "
+                            f"admin-blocked modules {skipped}."
                         )
                         self._log(f"Verify counts: {status_txt}")
                         messagebox.showinfo(
@@ -959,13 +1191,16 @@ class WindowsCleanerApp(tk.Tk):
                             f"Fixed (verified gone): {fixed}\n"
                             f"Not fixed / Needs Admin: {not_fixed}\n"
                             f"Still present (files locked/partial): {still}\n"
+                            f"Freed (best effort): {format_bytes(report.bytes_freed)}\n"
                             f"Actions: {applied} · Errors: {failed}\n\n"
+                            f"Sample Fixed items:\n{fixed_block}\n\n"
                             "Status guide:\n"
                             "• Fixed — re-scan confirms it is gone\n"
                             "• Not fixed — still detected (elevate & Clean)\n"
                             "• Failed — Needs Admin — restart as Administrator, then Clean\n"
                             "• Still present — files remain; close apps / reboot / retry\n"
-                            "• On next Scan: Came back = normal cache refill",
+                            "• On next Scan: Came back = normal cache refill\n\n"
+                            "Tip: Export last report for support / your notes.",
                         )
                     self._set_busy(False)
                     self.status_var.set("Done")
@@ -992,23 +1227,58 @@ class WindowsCleanerApp(tk.Tk):
             messagebox.showwarning(__app_name__, "Select at least one module.")
             return
 
-        admin_ids = {
-            "privacy",
-            "telemetry_services",
-            "caches",
-            "logs",
-            "bloatware",
-            "bloatware_oem",
-            "perf_services",
-        }
-        needs_admin = any(m.requires_admin for m in modules) or any(m.id in admin_ids for m in modules)
+        only_ids = self._collect_only_ids()
+        if only_ids is not None:
+            total_sel = sum(len(v) for v in only_ids.values())
+            if total_sel == 0:
+                messagebox.showwarning(
+                    __app_name__,
+                    "No rows are marked Clean? [x].\n\n"
+                    "Click [x]/[ ] on Scan results, or use Include all rows.",
+                )
+                return
+            # Restrict modules to those with at least one included item
+            modules = [m for m in modules if only_ids.get(m.id)]
+            if not modules:
+                messagebox.showwarning(
+                    __app_name__,
+                    "Included rows belong to modules that are unchecked on the left.\n"
+                    "Tick those modules or Include different rows.",
+                )
+                return
+
+        admin_needed_mods = [
+            m
+            for m in modules
+            if m.requires_admin
+            or m.id
+            in {
+                "privacy",
+                "telemetry_services",
+                "caches",
+                "logs",
+                "bloatware",
+                "bloatware_oem",
+                "perf_services",
+                "startup_apps",
+            }
+        ]
+        needs_admin = bool(admin_needed_mods)
+        # Also if any included item requires admin
+        if only_ids is not None and self._last_report is not None:
+            for r in self._last_report.results:
+                for item in r.items:
+                    if item.id in only_ids.get(r.module_id, set()) and item.requires_admin:
+                        needs_admin = True
+                        break
+
         if not dry_run and needs_admin and not is_admin():
+            names = "\n".join(f"  • {m.label}" for m in admin_needed_mods[:12])
             elevate = messagebox.askyesno(
                 __app_name__,
-                "Many selected items need Administrator or they will NOT stick "
-                "and will show up again on the next Scan.\n\n"
-                "Examples: privacy/AI policies, telemetry services, Windows Update cache, "
-                "bloatware / OEM removal, optional performance services.\n\n"
+                "These selected modules need Administrator or changes may NOT stick "
+                "and will show again on the next Scan:\n\n"
+                f"{names or '  • (item-level Admin targets)'}\n\n"
                 "Restart as Administrator now?\n\n"
                 "Choose No to clean only what works without Admin (temps/browser caches).",
                 icon=messagebox.WARNING,
@@ -1018,16 +1288,32 @@ class WindowsCleanerApp(tk.Tk):
                 self.destroy()
                 return
 
+        # Windows.old hard confirm when that item is in scope
+        if not dry_run and self._windows_old_in_scope(modules, only_ids):
+            if not messagebox.askyesno(
+                __app_name__,
+                "Windows.old is included.\n\n"
+                "Deleting it permanently removes your previous Windows installation "
+                "and you cannot roll back the feature update afterward.\n\n"
+                "This often frees 10–30+ GB. Continue?",
+                icon=messagebox.WARNING,
+            ):
+                return
+
         aggressive = [m.label for m in modules if m.risk == Risk.AGGRESSIVE]
         if not dry_run:
+            item_note = ""
+            if only_ids is not None:
+                n = sum(len(v) for v in only_ids.values())
+                item_note = f"\nPer-item filter: {n} Included row(s) will be cleaned.\n"
             lines = [
                 "DISCLAIMER — you use this tool at your own risk.",
                 "No warranty. Not affiliated with Microsoft or any OEM.",
                 "",
                 "This will permanently delete files and/or change system settings.",
                 "Prefer Scan → Dry-run first. Keep System Restore enabled when possible.",
-                "",
-                "Selected:",
+                item_note,
+                "Selected modules:",
                 *[f"  - {m.label} [{m.risk.value}]" for m in modules],
             ]
             if aggressive:
@@ -1057,24 +1343,61 @@ class WindowsCleanerApp(tk.Tk):
                 self._queue.put(("progress", msg))
                 if not ok:
                     self._queue.put(("progress", f"Restore point skipped: {msg[:80]}"))
-            return Cleaner(modules).clean(dry_run=dry_run, progress=progress)
+            return Cleaner(modules).clean(
+                dry_run=dry_run, progress=progress, only_ids=only_ids
+            )
 
         title = "Dry-run..." if dry_run else "Cleaning..."
         self._run_async(title, worker, "dry-run" if dry_run else "clean")
+
+    def _windows_old_in_scope(
+        self,
+        modules: list[CleanModule],
+        only_ids: dict[str, set[str]] | None,
+    ) -> bool:
+        if not any(m.id == "caches" for m in modules):
+            return False
+        if only_ids is not None:
+            return "windows_old" in only_ids.get("caches", set())
+        # No per-item filter: present if last scan saw it, or assume possible if caches selected
+        if self._last_report is not None:
+            for r in self._last_report.results:
+                if r.module_id == "caches":
+                    return any(i.id == "windows_old" for i in r.items)
+        return False
 
     def _on_elevate(self) -> None:
         if is_admin():
             messagebox.showinfo(__app_name__, "Already running as Administrator.")
             return
+        mods = self._selected_modules()
+        adminish = [
+            m.label
+            for m in mods
+            if m.requires_admin
+            or m.id
+            in {
+                "privacy",
+                "telemetry_services",
+                "caches",
+                "logs",
+                "bloatware",
+                "bloatware_oem",
+                "perf_services",
+                "startup_apps",
+            }
+        ]
+        detail = "\n".join(f"  • {n}" for n in adminish) if adminish else "  • (current selection)"
         if messagebox.askyesno(
             __app_name__,
             "Restart this app with Administrator rights?\n\n"
-            "Needed for Windows Update cache, system logs, privacy/AI policies, "
+            "Needed for selected modules such as:\n"
+            f"{detail}\n\n"
+            "Also needed for Windows Update cache, system logs, privacy/AI policies, "
             "telemetry services, bloatware / OEM removal, and optional performance services.",
         ):
             relaunch_as_admin()
             self.destroy()
-
 
 def run_gui() -> int:
     app = WindowsCleanerApp()

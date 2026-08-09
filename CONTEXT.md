@@ -51,6 +51,7 @@ main.py / windowscleaner/__main__.py
             └─ utils/
                  ├─ item_status.py   # Status / What to do + verify + history
                  ├─ admin.py, registry.py, fs.py, size.py, restore_point.py
+                 ├─ item_status.py, report_export.py, privacy_undo.py, windows_info.py
 ```
 
 ### Clean pipeline (must preserve)
@@ -79,14 +80,16 @@ main.py / windowscleaner/__main__.py
 | Profile | Behavior |
 |---------|----------|
 | `safe` | SAFE + default_enabled |
-| `standard` | all default_enabled except opt-in (`bloatware`, `bloatware_oem`, `perf_services`) |
+| `standard` | all default_enabled except opt-in (`bloatware`, `bloatware_oem`, `perf_services`, `startup_apps`) |
 | `privacy` | `privacy`, `tracking`, `telemetry_services` |
 | `oem` | `bloatware` + `bloatware_oem` only |
+| `disk` | space reclaim: temps, recycle, browser/GPU/system caches, logs |
+| `new_pc` | privacy + tracking + telemetry + bloat + OEM |
 | `full` | every module except `perf_services` (manual tick) |
 
 ### Module IDs
 
-`temp_files`, `recycle_bin`, `browser_caches`, `gpu_caches`, `caches`, `logs`, `tracking`, `network_cache`, `privacy`, `telemetry_services`, `bloatware`, `bloatware_oem`, `perf_services`
+`temp_files`, `recycle_bin`, `browser_caches`, `gpu_caches`, `caches`, `logs`, `tracking`, `network_cache`, `privacy`, `telemetry_services`, `startup_apps`, `bloatware`, `bloatware_oem`, `perf_services`
 
 ## Important design decisions
 
@@ -94,8 +97,10 @@ main.py / windowscleaner/__main__.py
 
 - Does **not** disable Defender or Windows Update
 - Does **not** remove Store / Photos / Calculator / BitLocker
-- Bloatware / OEM / perf services are **opt-in** (`default_enabled=False`)
+- Bloatware / OEM / perf services / startup apps are **opt-in** (`default_enabled=False`)
 - Prefer Scan → Dry-run → Clean; optional System Restore before Clean
+- Per-item Include filter: GUI passes `only_ids` into `Cleaner.clean` / each module `clean(..., only_ids=)`
+- Privacy Clean records previous DWORD values → `%LOCALAPPDATA%\WindowsCleaner\privacy_undo.json` (Undo Privacy)
 - User-facing disclaimer: `windowscleaner/disclaimer.py` (`DISCLAIMER_FULL` / `DISCLAIMER_SHORT`) — shown in GUI, CLI banner, Clean confirm, README
 - Methods are public Windows mechanisms (folders, `winreg`, `sc`/`schtasks`, AppX PowerShell, winget, `SHEmptyRecycleBin`) — aligned with Win11Debloat / WinUtil / ShutUp10-style / Sophia task lists — **no exploits**
 
@@ -166,8 +171,12 @@ main.py / windowscleaner/__main__.py
 | Status / verify / history | `utils/item_status.py` + `cleaner.py` |
 | Effect/repercussion copy | `modules/item_info.py` |
 | Privacy registry keys | `modules/privacy.py` `SETTINGS` |
+| Privacy undo | `utils/privacy_undo.py` |
+| Report export | `utils/report_export.py` |
+| Edition / Home banner | `utils/windows_info.py` |
 | Bloat package list + provisioned | `modules/bloatware.py` `BLOAT` |
 | OEM AppX / winget | `modules/bloatware_oem.py` |
+| Startup Run / folder | `modules/startup_apps.py` |
 | Optional SysMain/WSearch | `modules/perf_services.py` |
 | Services/tasks | `modules/telemetry_services.py` |
 | Profiles | `cleaner.py` `select_modules` |

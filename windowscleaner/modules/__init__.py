@@ -19,6 +19,7 @@ from windowscleaner.modules.network_cache import NetworkCacheModule
 from windowscleaner.modules.perf_services import PerfServicesModule
 from windowscleaner.modules.privacy import PrivacyModule
 from windowscleaner.modules.recycle_bin import RecycleBinModule
+from windowscleaner.modules.startup_apps import StartupAppsModule
 from windowscleaner.modules.telemetry_services import TelemetryServicesModule
 from windowscleaner.modules.temp_files import TempFilesModule
 from windowscleaner.modules.tracking import TrackingModule
@@ -33,8 +34,10 @@ __all__ = [
     "module_by_id",
 ]
 
-# Modules that must never auto-enable in standard (opt-in aggressive)
-OPT_IN_MODULE_IDS = frozenset({"bloatware", "bloatware_oem", "perf_services"})
+# Modules that must never auto-enable in standard (opt-in aggressive / selective)
+OPT_IN_MODULE_IDS = frozenset(
+    {"bloatware", "bloatware_oem", "perf_services", "startup_apps"}
+)
 
 
 def all_modules() -> list[CleanModule]:
@@ -49,6 +52,7 @@ def all_modules() -> list[CleanModule]:
         NetworkCacheModule(),
         PrivacyModule(),
         TelemetryServicesModule(),
+        StartupAppsModule(),
         BloatwareModule(),
         BloatwareOemModule(),
         PerfServicesModule(),

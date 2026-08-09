@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
 
 
 @dataclass(frozen=True)
@@ -262,10 +262,17 @@ class BloatwareOemModule(CleanModule):
 
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         from windowscleaner.utils.admin import is_admin
 
         result = self.scan(progress)
+        result.items = filter_items(result.items, only_ids)
         result.dry_run = dry_run
         admin = is_admin()
 

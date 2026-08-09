@@ -382,12 +382,20 @@ Copy and mark:
 [x] Phase B — AppX list + provisioned removal   → DONE
 [x] Phase C — OEM / winget module               → DONE (`bloatware_oem`)
 [x] Phase D — SysMain/WSearch opt-in perf module → DONE (`perf_services`)
-[ ] Phase E — Git basics (LICENSE, changelog, init)  → LATER
-[ ] Phase E+ — pyproject + tests                     → LATER
+[x] Phase E — Git basics (LICENSE, changelog)   → DONE (v1.2.0; repo already had git)
+[x] Phase E+ — pyproject + tests                → DONE (v1.2.0)
 [x] Phase E++ — GitHub Actions + Release zip  → SKIPPED (manual upload)
+
+[x] Phase F — Product maturity (P0–P3)          → DONE (v1.2.0)
+    - Per-item Include + only_ids clean path
+    - Admin pre-check module list, export report, stronger verify summary
+    - Startup apps module, edition banner, Windows.old confirm
+    - Privacy undo + applied-changes export
+    - Intent presets disk/new_pc; utils split (windows_info, report_export, privacy_undo)
 
 Release process: .\build.ps1 locally → upload zip/EXE to GitHub Release yourself
 UI declutter module: no (skipped — dilutes cleaner focus)
+Code signing: document only (no cert in repo)
 ```
 
 ---

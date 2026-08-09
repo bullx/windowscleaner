@@ -2,38 +2,20 @@
 
 from __future__ import annotations
 
-import winreg
 from dataclasses import dataclass
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import (
+    CleanItem,
+    CleanModule,
+    ModuleResult,
+    OnlyIds,
+    ProgressCb,
+    Risk,
+    allow_item,
+)
+from windowscleaner.utils.privacy_undo import record_change
 from windowscleaner.utils.registry import RegChange, get_value, set_dword, values_match
-
-
-def _windows_edition() -> str:
-    """Best-effort ProductName (e.g. Windows 11 Home)."""
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
-            0,
-            winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0),
-        ) as key:
-            name, _ = winreg.QueryValueEx(key, "ProductName")
-            return str(name)
-    except OSError:
-        return ""
-
-
-def _edition_note(setting_id: str) -> str:
-    if setting_id not in {"telemetry_level", "telemetry_dual", "max_telemetry_allowed"}:
-        return ""
-    edition = _windows_edition().lower()
-    if "home" in edition:
-        return (
-            " Note: on Windows Home, Microsoft may still enforce Required diagnostic "
-            "data even when this policy is 0 — Scan/Clean still apply the key."
-        )
-    return ""
+from windowscleaner.utils.windows_info import telemetry_edition_note as _edition_note
 
 
 @dataclass(frozen=True)
@@ -901,12 +883,20 @@ class PrivacyModule(CleanModule):
             )
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         from windowscleaner.utils.admin import is_admin
 
         result = ModuleResult(module_id=self.id, label=self.label, dry_run=dry_run)
         admin = is_admin()
         for setting, current in self._drift():
+            if not allow_item(setting.id, only_ids):
+                continue
             # On current Windows builds, HKCU\Policies and some Explorer keys also deny non-admin writes.
             needs_admin = setting.hive == "HKLM" or "\\Policies\\" in setting.path.replace("/", "\\")
             if needs_admin and not admin and not dry_run:
@@ -952,6 +942,16 @@ class PrivacyModule(CleanModule):
                     f"{'Would set' if dry_run else 'Set'} {setting.hive}\\{setting.path}\\"
                     f"{setting.name}={setting.desired} (was {current!r})"
                 )
+                if not dry_run:
+                    record_change(
+                        setting_id=setting.id,
+                        label=setting.label,
+                        hive=setting.hive,
+                        path=setting.path,
+                        name=setting.name,
+                        previous=current,
+                        applied=setting.desired,
+                    )
             else:
                 result.errors.append(
                     f"{setting.id}: {change.error or 'failed to write registry value'}"

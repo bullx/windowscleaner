@@ -6,7 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
 from windowscleaner.utils.admin import is_admin
 from windowscleaner.utils.fs import clear_directory_contents, merge_results
 from windowscleaner.utils.size import path_size
@@ -83,10 +83,17 @@ class TempFilesModule(CleanModule):
             )
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         # Dry-run: one size walk via scan. Real clean: delete walk only (no double scan).
         if dry_run:
             result = self.scan(progress)
+            result.items = filter_items(result.items, only_ids)
             result.dry_run = True
             for item in result.items:
                 result.bytes_freed += item.bytes_estimate
@@ -97,6 +104,8 @@ class TempFilesModule(CleanModule):
         admin = is_admin()
         results = []
         for item_id, path, needs_admin in _temp_targets():
+            if not allow_item(item_id, only_ids):
+                continue
             try:
                 if not path.exists():
                     continue

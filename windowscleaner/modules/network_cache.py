@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, ProgressCb, Risk
+from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
 
 
 class NetworkCacheModule(CleanModule):
@@ -28,8 +28,16 @@ class NetworkCacheModule(CleanModule):
             progress("DNS cache is a flush action (not sized junk)")
         return result
 
-    def clean(self, *, dry_run: bool = False, progress: ProgressCb | None = None) -> ModuleResult:
+    def clean(
+        self,
+        *,
+        dry_run: bool = False,
+        progress: ProgressCb | None = None,
+        only_ids: OnlyIds = None,
+    ) -> ModuleResult:
         result = ModuleResult(module_id=self.id, label=self.label, dry_run=dry_run)
+        if not allow_item("flushdns", only_ids):
+            return result
         result.items.append(
             CleanItem(
                 id="flushdns",

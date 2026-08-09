@@ -193,6 +193,12 @@ ITEM_INFO: dict[str, dict[str, tuple[str, str]]] = {
             "Can help or hurt depending on disk/RAM. Re-enable in services.msc. Not in Standard profile.",
         ),
     },
+    "startup_apps": {
+        "_default": (
+            "Removes a logon startup entry (Run key or Startup-folder shortcut).",
+            "App no longer auto-starts until you re-add it. Does not uninstall the program. Review before Clean.",
+        ),
+    },
 }
 
 # Privacy setting id -> repercussions (effect uses PrivacySetting.description)
