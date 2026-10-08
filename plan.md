@@ -1,8 +1,11 @@
 # Windows Cleaner — Improvement Plan
 
-**For review before implementation.**  
+**Historical plan (written 2026-08-02).**  
+Shipped work since then is in [CHANGELOG.md](CHANGELOG.md). Current behavior is in [README.md](README.md) and [CONTEXT.md](CONTEXT.md).
+
+As of **v1.3.0** (2026-10-07) the product includes provisioned AppX removal, OEM/winget (`bloatware_oem`), SysMain/WSearch (`perf_services`), startup programs, and **Optional Startup Services** (`startup_services`) plus a **debloat** profile. Sections below that say “not implemented” or “highest ROI next” describe the August 2026 backlog, not today’s app.
+
 Project: `C:\Custom\Projects\PycharmProjects\windowscleaner`  
-Date: 2026-08-02  
 Sources: current codebase, CONTEXT.md / README, Win11Debloat (2026), WinUtil / ShutUp10-style guides, OEM debloat practices
 
 ---
@@ -10,7 +13,7 @@ Sources: current codebase, CONTEXT.md / README, Win11Debloat (2026), WinUtil / S
 ## 1. Goal of this document
 
 List **everything worth considering** so you can approve, cut, or reorder work.  
-Nothing here is implemented until you say so.
+The August 2026 items below were a proposal. Shipped items are marked in Section 14 and in CHANGELOG.md.
 
 ---
 
@@ -393,6 +396,12 @@ Copy and mark:
     - Privacy undo + applied-changes export
     - Intent presets disk/new_pc; utils split (windows_info, report_export, privacy_undo)
 
+[x] Phase G — Debloat + startup services       → DONE (v1.3.0)
+    - startup_services opt-in (Disabled or Manual; never Defender/Update/Hello/audio/Wi-Fi)
+    - debloat profile = bloatware + bloatware_oem + startup_services
+    - extra inbox AppX matches (Camera, Scan, games, Narrator QuickStart, Take a Test)
+    - full preset still excludes perf_services and startup_services
+
 Release process: .\build.ps1 locally → upload zip/EXE to GitHub Release yourself
 UI declutter module: no (skipped — dilutes cleaner focus)
 Code signing: document only (no cert in repo)
@@ -402,12 +411,12 @@ Code signing: document only (no cert in repo)
 
 ## 15. Bottom line
 
-| Question | Answer |
-|----------|--------|
-| All slow-making registry keys today? | **No** — strong privacy/telemetry set; room for AI + companion keys |
-| Optional bloatware scan/remove today? | **Yes** — AppX allowlist, opt-in; incomplete vs Win11Debloat + no provisioned/OEM Win32 |
-| Highest ROI next? | **Phase A + B** (AI policies + provisioned AppX) |
-| Biggest “real PC feels faster” gap? | **OEM Win32** (Phase C) — separate, aggressive, opt-in |
-| Git/prod? | Ready for **Phase E** anytime; independent of cleanup power |
+| Question | Answer (as of v1.3.0) |
+|----------|------------------------|
+| All slow-making registry keys today? | **No** — privacy/telemetry/AI policy set is in `privacy`. This is not a full ShutUp10 clone. |
+| Optional bloatware scan/remove today? | **Yes** — `bloatware` (installed + provisioned) and `bloatware_oem`. Opt-in. Debloat preset turns both on. |
+| Unused startup services? | **Yes** — `startup_services`, opt-in, included by **debloat**, excluded from **full**. Undo in `services.msc`. |
+| SysMain / Windows Search? | **Yes** — `perf_services` only. Not part of Debloat or Full. |
+| Git/prod? | pyproject, tests, LICENSE, changelog. Release zip is still a manual `.\build.ps1` upload. |
 
-Review this file, tick Section 14, then ask to implement the approved phases only.
+For current rules, read README and CONTEXT. This file is the August 2026 backlog plus the checklist above.

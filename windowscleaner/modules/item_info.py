@@ -193,6 +193,12 @@ ITEM_INFO: dict[str, dict[str, tuple[str, str]]] = {
             "Can help or hurt depending on disk/RAM. Re-enable in services.msc. Not in Standard profile.",
         ),
     },
+    "startup_services": {
+        "_default": (
+            "Stops an optional Windows service from auto-starting or staying in memory.",
+            "Re-enable in services.msc. Defender, Windows Update, audio, Wi-Fi, and Windows Hello are not in this list.",
+        ),
+    },
     "startup_apps": {
         "_default": (
             "Removes a logon startup entry (Run key or Startup-folder shortcut).",
@@ -322,8 +328,17 @@ def enrich_result(result: ModuleResult) -> ModuleResult:
             fallback_effect=fallback_effect,
             fallback_repercussions=item.repercussions,
         )
-        # Services/tasks keep specific default text
-        if item.id.startswith("svc:"):
+        # Services/tasks keep specific default text.
+        # startup_services uses both svc: and usvc:; keep its copy ahead of the generic disable text.
+        if result.module_id == "startup_services" and item.id.startswith(("svc:", "usvc:")):
+            eff = item.effect or (
+                f"Changes optional startup service: {item.label.replace('Service: ', '')}."
+            )
+            rep = item.repercussions or (
+                "Frees the RAM it used at boot. Re-enable in services.msc. "
+                "Uncheck the row if you still use that feature."
+            )
+        elif item.id.startswith("svc:"):
             eff = f"Disables the '{item.label.replace('Service: ', '')}' Windows service (startup = Disabled)."
             rep = "Service stops auto-starting. Re-enable in services.msc. Does not delete Windows files."
         elif item.id.startswith("task:"):

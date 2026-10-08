@@ -10,7 +10,8 @@ Desktop + CLI tool for **Windows 10/11** that:
 2. Wipes local tracking residue
 3. Hardens privacy via registry/policy keys
 4. Disables telemetry services & scheduled tasks
-5. Optionally removes preinstalled AppX bloatware
+5. Optionally removes preinstalled AppX bloatware and OEM/Win32 junk
+6. Optionally stops unused Windows services that auto-start or sit in memory (`startup_services`)
 
 **Not** a background resident “optimizer.” Work runs only during Scan / Dry-run / Clean.
 
@@ -80,16 +81,17 @@ main.py / windowscleaner/__main__.py
 | Profile | Behavior |
 |---------|----------|
 | `safe` | SAFE + default_enabled |
-| `standard` | all default_enabled except opt-in (`bloatware`, `bloatware_oem`, `perf_services`, `startup_apps`) |
+| `standard` | all default_enabled except opt-in (`bloatware`, `bloatware_oem`, `perf_services`, `startup_apps`, `startup_services`) |
 | `privacy` | `privacy`, `tracking`, `telemetry_services` |
 | `oem` | `bloatware` + `bloatware_oem` only |
 | `disk` | space reclaim: temps, recycle, browser/GPU/system caches, logs |
 | `new_pc` | privacy + tracking + telemetry + bloat + OEM |
-| `full` | every module except `perf_services` (manual tick) |
+| `debloat` | `bloatware` + `bloatware_oem` + `startup_services` |
+| `full` | every module except `perf_services` and `startup_services` (manual tick) |
 
 ### Module IDs
 
-`temp_files`, `recycle_bin`, `browser_caches`, `gpu_caches`, `caches`, `logs`, `tracking`, `network_cache`, `privacy`, `telemetry_services`, `startup_apps`, `bloatware`, `bloatware_oem`, `perf_services`
+`temp_files`, `recycle_bin`, `browser_caches`, `gpu_caches`, `caches`, `logs`, `tracking`, `network_cache`, `privacy`, `telemetry_services`, `startup_apps`, `bloatware`, `bloatware_oem`, `startup_services`, `perf_services`
 
 ## Important design decisions
 
@@ -97,12 +99,23 @@ main.py / windowscleaner/__main__.py
 
 - Does **not** disable Defender or Windows Update
 - Does **not** remove Store / Photos / Calculator / BitLocker
-- Bloatware / OEM / perf services / startup apps are **opt-in** (`default_enabled=False`)
+- Bloatware / OEM / perf services / startup apps / startup services are **opt-in** (`default_enabled=False`)
 - Prefer Scan → Dry-run → Clean; optional System Restore before Clean
 - Per-item Include filter: GUI passes `only_ids` into `Cleaner.clean` / each module `clean(..., only_ids=)`
 - Privacy Clean records previous DWORD values → `%LOCALAPPDATA%\WindowsCleaner\privacy_undo.json` (Undo Privacy)
 - User-facing disclaimer: `windowscleaner/disclaimer.py` (`DISCLAIMER_FULL` / `DISCLAIMER_SHORT`) — shown in GUI, CLI banner, Clean confirm, README
 - Methods are public Windows mechanisms (folders, `winreg`, `sc`/`schtasks`, AppX PowerShell, winget, `SHEmptyRecycleBin`) — aligned with Win11Debloat / WinUtil / ShutUp10-style / Sophia task lists — **no exploits**
+
+### Bloatware and startup services (v1.3.0)
+
+- Human docs: README section “Debloat: default apps and startup services”. Security scope: `SECURITY.md`.
+- `bloatware` allowlist: `modules/bloatware.py` `BLOAT` (installed + provisioned). Store, Photos, Calculator, codecs, and Defender stay off the list.
+- `startup_services` allowlist: `modules/startup_services.py` `SERVICES`.
+  - Scan offers a service only when it exists and is not already Disabled. **Disabled** targets are offered if Automatic or currently running. **Manual** (`demand`) targets are offered only when Automatic, so features can still start an already-manual service.
+  - Clean runs `sc stop` and `sc config start= disabled|demand`. Per-user services use id prefix `usvc:` and the template name plus `Name_<id>` instances.
+  - Do not add Defender, Update, BITS, firewall, SmartScreen, audio, Wi-Fi, Bluetooth, Windows Hello, Store licensing, or Hyper-V / WSL (`vmcompute`, `HvHost`, `hns`, `LxssManager`). Do not duplicate `telemetry_services` or `perf_services` names.
+- `MANUAL_PRESET_IDS` (`perf_services`, `startup_services`) stay off in the **full** preset. Profile `debloat` is the explicit on-switch for bloat + OEM + startup services.
+- GUI copy for these rows is set on the `CleanItem` and reinforced in `modules/item_info.py`.
 
 ### Admin / status after Clean
 
@@ -114,7 +127,7 @@ main.py / windowscleaner/__main__.py
 - `network_cache` is a flush action; scan does not pretend it is reclaimable junk every time
 - Status engine: `utils/item_status.py`
   - `MODULE_KIND`: ephemeral vs sticky vs maintenance
-  - `ADMIN_MODULES`: `privacy`, `telemetry_services`, `bloatware`, `bloatware_oem`, `perf_services` (scan labeling)
+  - `ADMIN_MODULES`: `privacy`, `telemetry_services`, `bloatware`, `bloatware_oem`, `perf_services`, `startup_services` (scan labeling)
   - History: `%LOCALAPPDATA%\WindowsCleaner\last_clean.json`
 - **Cleaner does not silently skip whole modules** — each module handles Admin per item
 - `caches.requires_admin = False` at module level so thumbnails/WebCache can clean without elevation; WU/DO/prefetch items still `requires_admin=True` per item
@@ -178,6 +191,7 @@ main.py / windowscleaner/__main__.py
 | OEM AppX / winget | `modules/bloatware_oem.py` |
 | Startup Run / folder | `modules/startup_apps.py` |
 | Optional SysMain/WSearch | `modules/perf_services.py` |
+| Optional startup RAM services | `modules/startup_services.py` |
 | Services/tasks | `modules/telemetry_services.py` |
 | Profiles | `cleaner.py` `select_modules` |
 | UI behavior | `ui/gui.py` |
@@ -188,6 +202,7 @@ main.py / windowscleaner/__main__.py
 ## Do not
 
 - Disable Windows Defender / wuauserv as a “tweak”
+- Add Defender, Update, firewall, audio, Wi-Fi, Bluetooth, Windows Hello, or Hyper-V/WSL services to `startup_services`
 - Force-remove Edge / break WinRE / resize partitions
 - Reintroduce silent whole-module Admin skips (items must appear with Failed — Needs Admin)
 - Fake Clean success without verify, or remove Fixed / Not fixed / Still present

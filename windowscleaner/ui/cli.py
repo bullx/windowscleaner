@@ -26,7 +26,7 @@ from windowscleaner.utils.windows_info import edition_banner_text
 
 console = Console(legacy_windows=False, soft_wrap=True)
 
-PROFILE_CHOICES = ["safe", "standard", "privacy", "oem", "disk", "new_pc", "full"]
+PROFILE_CHOICES = ["safe", "standard", "privacy", "oem", "disk", "new_pc", "debloat", "full"]
 
 
 def _risk_style(risk: str) -> str:

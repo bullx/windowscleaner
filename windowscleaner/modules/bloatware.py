@@ -133,6 +133,24 @@ BLOAT: list[BloatApp] = [
     BloatApp("PhototasticCollage", "Phototastic Collage", "OEM collage stub."),
     BloatApp("PolarrPhotoEditorAcademicEdition", "Polarr Photo Editor", "OEM photo editor."),
     BloatApp("Sidia.LiveWallpaper", "Live Wallpaper", "OEM live wallpaper."),
+    # More default inbox apps (optional — review before Clean)
+    BloatApp("Microsoft.WindowsCamera", "Camera", "Inbox Camera app. Keep if you use the webcam app."),
+    BloatApp("Microsoft.WindowsScan", "Windows Scan", "Inbox scanner app. Keep if you scan from this PC."),
+    BloatApp("Microsoft.WindowsReadingList", "Reading List", "Legacy reading-list app."),
+    BloatApp(
+        "Microsoft.Windows.SecureAssessmentBrowser",
+        "Take a Test",
+        "School secure-assessment browser. Not needed on a home PC.",
+    ),
+    BloatApp(
+        "Microsoft.Windows.NarratorQuickStart",
+        "Narrator QuickStart",
+        "Narrator intro package. Does not remove Narrator itself.",
+    ),
+    BloatApp("Microsoft.MicrosoftMahjong", "Microsoft Mahjong", "Inbox game."),
+    BloatApp("Microsoft.MicrosoftMinesweeper", "Microsoft Minesweeper", "Inbox game."),
+    BloatApp("Microsoft.MicrosoftJigsaw", "Microsoft Jigsaw", "Inbox game."),
+    BloatApp("Microsoft.MicrosoftSudoku", "Microsoft Sudoku", "Inbox game."),
 ]
 
 

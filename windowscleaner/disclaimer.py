@@ -22,6 +22,8 @@ What this tool can do
   • Uninstall Store (AppX) apps and deprovision them for new users
   • Optionally uninstall OEM / Win32 software via winget
   • Optionally disable SysMain or Windows Search (can help or hurt performance)
+  • Optionally stop unused startup services (Fax, Xbox, print spooler, and similar).
+    Never Windows Defender, Windows Update, audio, Wi-Fi, or Windows Hello
 
 Important limits
   • Not every “slow PC” cause is covered. Telemetry and bloat help some systems; others
@@ -37,7 +39,7 @@ Safety habits
   1. Prefer Scan → Dry-run → Clean
   2. Enable “Create System Restore point” before Clean (when available)
   3. Run as Administrator only when you need privacy / services / system / bloat changes
-  4. Review Aggressive modules (bloatware, OEM, perf services) item-by-item before Clean
+  4. Review Aggressive modules (bloatware, OEM, startup services, perf services) item-by-item before Clean
   5. This tool does NOT disable Windows Defender or Windows Update, and does not touch
      BitLocker, disk partitions, or WinRE
 

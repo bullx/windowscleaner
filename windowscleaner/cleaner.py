@@ -60,9 +60,10 @@ def select_modules(
       oem       - bloatware AppX + OEM/winget module only
       disk      - space reclaim (temps, caches, logs, recycle)
       new_pc    - privacy + tracking + telemetry + bloat + OEM (new laptop intent)
-      full      - everything except optional perf_services (SysMain/WSearch stay manual)
+      debloat   - bloatware + OEM + optional startup services (review rows before Clean)
+      full      - everything except perf_services and startup_services (those stay manual)
     """
-    from windowscleaner.modules import OPT_IN_MODULE_IDS, all_modules
+    from windowscleaner.modules import MANUAL_PRESET_IDS, OPT_IN_MODULE_IDS, all_modules
 
     only_set = {x.strip() for x in (only or []) if x.strip()}
     exclude_set = {x.strip() for x in (exclude or []) if x.strip()}
@@ -82,6 +83,11 @@ def select_modules(
         "telemetry_services",
         "bloatware",
         "bloatware_oem",
+    }
+    debloat_ids = {
+        "bloatware",
+        "bloatware_oem",
+        "startup_services",
     }
 
     for mod in all_modules():
@@ -108,8 +114,11 @@ def select_modules(
         elif profile == "new_pc":
             if mod.id in new_pc_ids:
                 selected.append(mod)
+        elif profile == "debloat":
+            if mod.id in debloat_ids:
+                selected.append(mod)
         elif profile == "full":
-            if mod.id != "perf_services":
+            if mod.id not in MANUAL_PRESET_IDS:
                 selected.append(mod)
         else:  # standard
             if mod.id in OPT_IN_MODULE_IDS:

@@ -42,6 +42,7 @@ def test_select_modules_profiles() -> None:
     assert "bloatware" not in standard
     assert "startup_apps" not in standard
     assert "perf_services" not in standard
+    assert "startup_services" not in standard
 
     privacy = {m.id for m in select_modules(profile="privacy")}
     assert privacy == {"privacy", "tracking", "telemetry_services"}
@@ -55,11 +56,99 @@ def test_select_modules_profiles() -> None:
 
     new_pc = {m.id for m in select_modules(profile="new_pc")}
     assert "bloatware_oem" in new_pc and "privacy" in new_pc
+    assert "startup_services" not in new_pc
+
+    debloat = {m.id for m in select_modules(profile="debloat")}
+    assert debloat == {"bloatware", "bloatware_oem", "startup_services"}
 
     full = {m.id for m in select_modules(profile="full")}
     assert "bloatware" in full
     assert "startup_apps" in full
     assert "perf_services" not in full
+    assert "startup_services" not in full
+
+
+def test_startup_services_catalog_is_safe() -> None:
+    from windowscleaner.modules.perf_services import SERVICES as PERF
+    from windowscleaner.modules.startup_services import SERVICES, should_offer
+    from windowscleaner.modules.telemetry_services import SERVICES as TELEMETRY
+
+    names = [svc.name for svc in SERVICES]
+    assert len(names) == len(set(names))
+    assert set(names).isdisjoint({svc.name for svc in TELEMETRY})
+    assert set(names).isdisjoint({svc.name for svc in PERF})
+
+    never = {
+        "WinDefend",
+        "WdNisSvc",
+        "MDCoreSvc",
+        "SecurityHealthService",
+        "wscsvc",
+        "Sense",
+        "mpssvc",
+        "BFE",
+        "wuauserv",
+        "UsoSvc",
+        "WaaSMedicSvc",
+        "BITS",
+        "DoSvc",
+        "edgeupdate",
+        "CryptSvc",
+        "SamSs",
+        "RpcSs",
+        "DcomLaunch",
+        "LSM",
+        "EventLog",
+        "Schedule",
+        "Dhcp",
+        "Dnscache",
+        "Audiosrv",
+        "AudioEndpointBuilder",
+        "WlanSvc",
+        "bthserv",
+        "BthAvctpSvc",
+        "NgcSvc",
+        "NgcCtnrSvc",
+        "WbioSrvc",
+        "vmcompute",
+        "HvHost",
+        "hns",
+        "LxssManager",
+        "AppXSvc",
+        "ClipSVC",
+        "sppsvc",
+        "webthreatdefsvc",
+        "webthreatdefusersvc",
+        "wlidsvc",
+        "SysMain",
+        "WSearch",
+        "DiagTrack",
+    }
+    assert set(names).isdisjoint(never)
+    assert all(svc.target in {"disabled", "demand"} for svc in SERVICES)
+
+    assert should_offer("2   AUTO_START", "4  RUNNING", "disabled")
+    assert should_offer("2   AUTO_START (DELAYED)", "1  STOPPED", "demand")
+    assert not should_offer("4   DISABLED", "1  STOPPED", "disabled")
+    assert not should_offer("3   DEMAND_START", "1  STOPPED", "disabled")
+    assert should_offer("3   DEMAND_START", "4  RUNNING", "disabled")
+    assert not should_offer("3   DEMAND_START", "4  RUNNING", "demand")
+    assert not should_offer("0   BOOT_START", "4  RUNNING", "disabled")
+    assert not should_offer("1   SYSTEM_START", "4  RUNNING", "demand")
+    assert not should_offer(None, None, "disabled")
+
+
+def test_bloat_includes_inbox_optional_apps() -> None:
+    from windowscleaner.modules.bloatware import BLOAT
+
+    matches = {app.match for app in BLOAT}
+    for needle in (
+        "Microsoft.WindowsCamera",
+        "Microsoft.MicrosoftMinesweeper",
+        "Microsoft.Windows.NarratorQuickStart",
+        "Clipchamp.Clipchamp",
+    ):
+        assert needle in matches
 
 
 def test_allow_item_and_filter() -> None:

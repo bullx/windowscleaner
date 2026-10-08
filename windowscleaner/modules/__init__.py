@@ -20,6 +20,7 @@ from windowscleaner.modules.perf_services import PerfServicesModule
 from windowscleaner.modules.privacy import PrivacyModule
 from windowscleaner.modules.recycle_bin import RecycleBinModule
 from windowscleaner.modules.startup_apps import StartupAppsModule
+from windowscleaner.modules.startup_services import StartupServicesModule
 from windowscleaner.modules.telemetry_services import TelemetryServicesModule
 from windowscleaner.modules.temp_files import TempFilesModule
 from windowscleaner.modules.tracking import TrackingModule
@@ -36,8 +37,18 @@ __all__ = [
 
 # Modules that must never auto-enable in standard (opt-in aggressive / selective)
 OPT_IN_MODULE_IDS = frozenset(
-    {"bloatware", "bloatware_oem", "perf_services", "startup_apps"}
+    {
+        "bloatware",
+        "bloatware_oem",
+        "perf_services",
+        "startup_apps",
+        "startup_services",
+    }
 )
+
+# Opt-in modules that stay unchecked even in the Full preset.
+# Debloat turns startup_services on explicitly; SysMain/Search stay manual.
+MANUAL_PRESET_IDS = frozenset({"perf_services", "startup_services"})
 
 
 def all_modules() -> list[CleanModule]:
@@ -55,6 +66,7 @@ def all_modules() -> list[CleanModule]:
         StartupAppsModule(),
         BloatwareModule(),
         BloatwareOemModule(),
+        StartupServicesModule(),
         PerfServicesModule(),
     ]
 

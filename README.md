@@ -1,6 +1,6 @@
 # Windows Cleaner
 
-Python toolkit that reclaims disk space, wipes local tracking residue, hardens privacy/telemetry settings, disables noisy telemetry services & scheduled tasks, and optionally removes preinstalled Store/OEM bloatware.
+Python toolkit that reclaims disk space, wipes local tracking residue, hardens privacy/telemetry settings, disables noisy telemetry services & scheduled tasks, and optionally removes preinstalled Store/OEM bloatware and unused startup services.
 
 Designed for **Windows 10 / 11**. Run as Administrator for full effect (privacy policies, services, update caches, bloatware).
 
@@ -17,7 +17,7 @@ python -m windowscleaner
 python main.py
 ```
 
-In the GUI: pick modules (or **Safe / Standard / Privacy / OEM / Full**, or intent **Free disk / New laptop**) → **Scan** → toggle **Clean?** (`[x]`/`[ ]`) per row → **Dry-run** → **Clean**.  
+In the GUI: pick modules (or **Safe / Standard / Privacy / OEM / Full**, or intent **Free disk / New laptop / Debloat**) → **Scan** → toggle **Clean?** (`[x]`/`[ ]`) per row → **Dry-run** → **Clean**.  
 Use **Restart as Administrator** when privacy/services/system cleanup must stick.
 
 ## What it targets
@@ -35,23 +35,41 @@ Use **Restart as Administrator** when privacy/services/system cleanup must stick
 | Privacy & Telemetry Hardening | `privacy` | Registry/policy: telemetry, ads, Copilot/Recall/Click-to-Do, Paint/Notepad/Edge AI, Widgets, Delivery Optimization, Find My Device (Win11Debloat / WinUtil / ShutUp10-style) | Moderate |
 | Telemetry Services & Tasks | `telemetry_services` | DiagTrack + CEIP / Flighting / PushToInstall / Maps / Device Info / WinSAT tasks | Aggressive |
 | Startup Programs | `startup_apps` | HKCU/HKLM Run entries + Startup-folder shortcuts (disable selected) | Moderate (opt-in) |
-| Preinstalled Bloatware | `bloatware` | Win11Debloat-style AppX list + **provisioned** deprovision (Clipchamp, Copilot, Dev Home, Feedback Hub, OEM candy, …) | Aggressive (opt-in) |
+| Preinstalled Bloatware | `bloatware` | Win11Debloat-style AppX list + **provisioned** deprovision (Clipchamp, Copilot, Dev Home, Feedback Hub, inbox games, OEM candy, …) | Aggressive (opt-in) |
 | OEM / Win32 Bloat | `bloatware_oem` | HP/Dell/Lenovo AppX families + winget uninstall for SupportAssist / Vantage / Wolf / AV trials | Aggressive (opt-in) |
+| Optional Startup Services | `startup_services` | Fax, Xbox/Game Bar, Game DVR, print spooler, Remote Desktop listener, Phone Link helpers — Disabled or Manual. Never Defender, Update, audio, Wi-Fi, or Windows Hello | Aggressive (opt-in) |
 | Optional Performance Services | `perf_services` | SysMain (Superfetch) + Windows Search indexer — helps some PCs, hurts others | Aggressive (opt-in) |
 
 ### Profiles
 
 - **safe** — SAFE modules only (temps, recycle bin, logs, DNS, browser/GPU caches)
-- **standard** (default) — space reclaim + tracking wipe + privacy keys + telemetry services (no app uninstalls / no SysMain / no startup)
+- **standard** (default) — space reclaim + tracking wipe + privacy keys + telemetry services (no app uninstalls / no SysMain / no startup apps or startup services)
 - **privacy** — privacy + tracking + telemetry services only
 - **oem** — bloatware AppX + OEM/winget module only
 - **disk** — Free disk intent (temps, recycle, browser/GPU/system caches, logs)
 - **new_pc** — New laptop intent (privacy + tracking + telemetry + bloat + OEM)
-- **full** — everything except optional `perf_services` (tick that module manually if you want it)
+- **debloat** — bloatware + OEM + optional startup services (review each row before Clean)
+- **full** — everything except optional `perf_services` and `startup_services` (tick those manually)
+
+### Debloat: default apps and startup services
+
+**Debloat** selects three opt-in modules. Standard does not. New laptop includes the two app modules and leaves startup services off. Full leaves both startup services and SysMain / Windows Search off until you tick them.
+
+| Piece | Module | What Clean does | Undo |
+|--------|--------|-----------------|------|
+| Inbox Store apps | `bloatware` | `Remove-AppxPackage` for installed matches and `Remove-AppxProvisionedPackage` so new users do not get them again. Includes Copilot, Clipchamp, widgets/news stubs, OEM candy, Camera, Scan, Reading List, Take a Test, Narrator QuickStart (not Narrator), and inbox games (Mahjong, Minesweeper, Jigsaw, Sudoku). | Reinstall from the Microsoft Store |
+| OEM / Win32 | `bloatware_oem` | OEM AppX families plus `winget uninstall` for SupportAssist, Vantage, Wolf, AV trials, and similar | Vendor installer, or the vendor removal tool for AV suites |
+| Startup services | `startup_services` | Stops services that are Automatic, or already running when the row is meant to be Disabled. Sets startup to **Disabled** or **Manual** (`sc config`). Manual can still start when a feature asks. | `services.msc` |
+
+Startup-service rows say when to keep them (printing, Xbox, Remote Desktop, Phone Link, and so on). Uncheck those rows before Clean.
+
+`startup_services` does not list Windows Defender, Windows Update, BITS, firewall, SmartScreen, audio, Wi-Fi, Bluetooth, Windows Hello, Store licensing, or Hyper-V / WSL. SysMain and Windows Search stay in `perf_services`. DiagTrack and the other telemetry services stay in `telemetry_services`.
+
+The allowlists live in `windowscleaner/modules/bloatware.py` (`BLOAT`) and `windowscleaner/modules/startup_services.py` (`SERVICES`).
 
 ## GUI features
 
-- Module checkboxes + presets (Safe / Standard / Privacy / OEM / Full) + intent (Free disk / New laptop)
+- Module checkboxes + presets (Safe / Standard / Privacy / OEM / Full) + intent (Free disk / New laptop / Debloat)
 - Results table with **Clean?** (`[x]`/`[ ]`), **Status**, **What to do**, **Risk**, **What it does**, and **Repercussions**
 - After Scan, click **Clean?** to toggle rows so Clean only touches checked items (e.g. keep Xbox, remove Candy Crush)
 - **Export last report** (JSON/TXT) and **Undo privacy changes** (restores recorded previous registry values)
@@ -99,7 +117,9 @@ python -m windowscleaner --cli --elevate clean --profile standard -y
 python -m windowscleaner --cli --elevate clean --profile full -y
 python -m windowscleaner --cli --elevate clean --profile oem -y
 python -m windowscleaner --cli --elevate clean --profile new_pc -y
+python -m windowscleaner --cli --elevate clean --profile debloat -y
 python -m windowscleaner --cli --elevate clean --only perf_services -y
+python -m windowscleaner --cli --elevate clean --only startup_services -y
 python -m windowscleaner --cli --elevate clean --only startup_apps -y
 python -m windowscleaner --cli clean --only privacy,tracking -y
 python -m windowscleaner --cli undo-privacy --dry-run
@@ -145,6 +165,7 @@ No Python install required. Windows may show SmartScreen on unsigned EXEs — **
 - **Bloatware / OEM / Windows.old** removal can be hard or impossible to undo without reinstalling apps or losing rollback.
 - Privacy and service changes are usually reversible via Registry, `services.msc`, and Task Scheduler — but test carefully.
 - Optional **SysMain / Windows Search** disables can help or hurt performance depending on your hardware.
+- Optional **startup services** (Debloat) stop unused auto-start services. Uncheck Print Spooler if you print, and Xbox rows if you play games. Re-enable anything in `services.msc`.
 - Windows **Home** may still send Required diagnostic data even when telemetry policies are applied.
 - This tool does **not** disable Windows Defender or Windows Update, and avoids breaking Store / BitLocker.
 - Methods use documented Windows APIs (folders, registry policies, services, Task Scheduler, AppX, winget) — aligned with Win11Debloat / WinUtil / ShutUp10-style guides. No exploits.
@@ -154,7 +175,7 @@ In the GUI: open **Disclaimer**. In the CLI: `python -m windowscleaner --cli dis
 ## Safety notes
 
 - Prefer **Scan** / **Dry-run** first.
-- **Bloatware removal is irreversible** without reinstalling from the Microsoft Store — `full` / `bloatware` / `oem` are opt-in.
+- **Bloatware removal is irreversible** without reinstalling from the Microsoft Store. `bloatware`, `bloatware_oem`, and the **debloat** profile are opt-in. **Full** includes app removal; it does not include `startup_services` or `perf_services`.
 - OEM agents (SupportAssist, HP Wolf, Lenovo Vantage, AV trials) may reinstall via drivers/BIOS; prefer vendor removers for full AV suites.
 - Prefetch cleanup may make the *next* few cold boots slightly slower.
 - Deleting **Windows.old** permanently removes the previous Windows install / rollback.
@@ -164,7 +185,7 @@ In the GUI: open **Disclaimer**. In the CLI: `python -m windowscleaner --cli dis
 ```
 windowscleaner/
   modules/          # one cleaner per concern (+ item effect/repercussion text)
-                    # incl. startup_apps, bloatware (provisioned), bloatware_oem, perf_services
+                    # incl. startup_apps, startup_services, bloatware (provisioned), bloatware_oem, perf_services
   utils/            # admin, fs, registry, sizes, restore point, item_status, report_export, privacy_undo
   ui/gui.py         # light-theme desktop UI
   ui/cli.py         # Rich + Click CLI
@@ -173,6 +194,8 @@ main.py
 CONTEXT.md          # agent briefing (read this in new sessions)
 plan.md             # improvement plan / decisions
 CHANGELOG.md
+SECURITY.md
+CONTRIBUTING.md
 LICENSE
 pyproject.toml
 tests/              # smoke tests (no live mutation)

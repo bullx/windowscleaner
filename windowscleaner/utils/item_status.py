@@ -29,6 +29,7 @@ MODULE_KIND: dict[str, str] = {
     "bloatware_oem": "sticky",
     "perf_services": "sticky",
     "startup_apps": "sticky",
+    "startup_services": "sticky",
 }
 
 # Modules where nearly every fix needs elevation (sticky policy / services / uninstall)
@@ -38,6 +39,7 @@ ADMIN_MODULES = {
     "bloatware",
     "bloatware_oem",
     "perf_services",
+    "startup_services",
 }
 
 # Statuses that mean "do not override with verify Fixed unless gone"

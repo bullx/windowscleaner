@@ -14,7 +14,7 @@ from typing import Callable
 from windowscleaner import __app_name__, __version__
 from windowscleaner.cleaner import CleanReport, Cleaner
 from windowscleaner.disclaimer import DISCLAIMER_FULL, DISCLAIMER_SHORT
-from windowscleaner.modules import all_modules
+from windowscleaner.modules import MANUAL_PRESET_IDS, OPT_IN_MODULE_IDS, all_modules
 from windowscleaner.modules.base import CleanModule, Risk
 from windowscleaner.utils.admin import is_admin, relaunch_as_admin
 from windowscleaner.utils.privacy_undo import load_undo, undo_all
@@ -68,15 +68,15 @@ DEFAULT_VISIBLE_COLUMNS = [
 
 PROFILE_IDS = {
     "safe": lambda m: m.risk == Risk.SAFE and m.default_enabled,
-    "standard": lambda m: m.default_enabled
-    and m.id not in {"bloatware", "bloatware_oem", "perf_services", "startup_apps"},
+    "standard": lambda m: m.default_enabled and m.id not in OPT_IN_MODULE_IDS,
     "privacy": lambda m: m.id in {"privacy", "tracking", "telemetry_services"},
     "oem": lambda m: m.id in {"bloatware", "bloatware_oem"},
     "disk": lambda m: m.id
     in {"temp_files", "recycle_bin", "browser_caches", "gpu_caches", "caches", "logs"},
     "new_pc": lambda m: m.id
     in {"privacy", "tracking", "telemetry_services", "bloatware", "bloatware_oem"},
-    "full": lambda m: m.id != "perf_services",
+    "debloat": lambda m: m.id in {"bloatware", "bloatware_oem", "startup_services"},
+    "full": lambda m: m.id not in MANUAL_PRESET_IDS,
 }
 
 # Plain ASCII — Unicode ☑/☐ often renders wrong / clipped in ttk Treeview on Windows
@@ -108,6 +108,7 @@ What each category does:
 6) OEM / Win32 (opt-in) - OEM AppX families + winget uninstall (SupportAssist, Vantage, Wolf, …)
 7) Startup programs (opt-in) - HKCU/HKLM Run keys + Startup folder shortcuts
 8) Optional perf services (opt-in, not in Full) - SysMain / WSearch disable
+9) Optional startup services (opt-in, Debloat preset, not in Full) - Fax, Xbox/Game Bar, print spooler, Remote Desktop listener, Phone Link helpers, and similar. Never Defender, Update, audio, Wi-Fi, or Windows Hello.
 
 After Scan: toggle Clean? ([x] / [ ]) per row so Clean only touches what you keep checked.
 Export report saves JSON/TXT for support. Undo Privacy restores prior registry values when recorded.
@@ -348,6 +349,9 @@ class WindowsCleanerApp(tk.Tk):
         )
         ttk.Button(
             intent_row, text="New laptop", command=lambda: self._apply_profile("new_pc"), width=10
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(
+            intent_row, text="Debloat", command=lambda: self._apply_profile("debloat"), width=10
         ).pack(side=tk.LEFT)
 
         box = ttk.LabelFrame(parent, text="Modules", padding=8)
@@ -380,10 +384,7 @@ class WindowsCleanerApp(tk.Tk):
         }
 
         for mod in self._modules:
-            var = tk.BooleanVar(
-                value=mod.default_enabled
-                and mod.id not in {"bloatware", "bloatware_oem", "perf_services", "startup_apps"}
-            )
+            var = tk.BooleanVar(value=mod.default_enabled and mod.id not in OPT_IN_MODULE_IDS)
             self._vars[mod.id] = var
 
             row = tk.Frame(inner, bg=C["card"], pady=6)
@@ -1261,6 +1262,7 @@ class WindowsCleanerApp(tk.Tk):
                 "bloatware_oem",
                 "perf_services",
                 "startup_apps",
+                "startup_services",
             }
         ]
         needs_admin = bool(admin_needed_mods)
@@ -1385,6 +1387,7 @@ class WindowsCleanerApp(tk.Tk):
                 "bloatware_oem",
                 "perf_services",
                 "startup_apps",
+                "startup_services",
             }
         ]
         detail = "\n".join(f"  • {n}" for n in adminish) if adminish else "  • (current selection)"
@@ -1394,7 +1397,8 @@ class WindowsCleanerApp(tk.Tk):
             "Needed for selected modules such as:\n"
             f"{detail}\n\n"
             "Also needed for Windows Update cache, system logs, privacy/AI policies, "
-            "telemetry services, bloatware / OEM removal, and optional performance services.",
+            "telemetry services, bloatware / OEM removal, optional startup services, "
+            "and optional performance services.",
         ):
             relaunch_as_admin()
             self.destroy()

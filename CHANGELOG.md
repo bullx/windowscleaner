@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-07
+
+### Added
+- Optional Startup Services module (`startup_services`) — Fax, Xbox/Game Bar, Game DVR, print spooler, Remote Desktop listener, Phone Link helpers, and similar. Disabled or Manual only. Defender, Windows Update, audio, Wi-Fi, Bluetooth, and Windows Hello are excluded.
+- Debloat preset (`debloat`) — preinstalled AppX + OEM/winget + startup services. Review rows before Clean.
+- Extra inbox AppX matches: Camera, Scan, Reading List, Take a Test, Narrator QuickStart, Mahjong, Minesweeper, Jigsaw, Sudoku.
+
+### Notes
+- `startup_services` is opt-in and stays off in Standard, New laptop, and Full. Tick the module or use Debloat.
+- SysMain and Windows Search stay in `perf_services`.
+
 ## [1.2.0] - 2026-08-07
 
 ### Added
