@@ -679,6 +679,11 @@ class StartupServicesModule(CleanModule):
             ok = 0
             failures: list[str] = []
             for target_name in names:
+                if not dry_run:
+                    start, _state = _service_state(target_name)
+                    from windowscleaner.utils.change_undo import remember_service
+
+                    remember_service(name=target_name, start_text=start)
                 code, err = _apply_start(target_name, svc.target)
                 if code == 0:
                     ok += 1

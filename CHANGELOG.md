@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-12
+
+### Added
+- AI caches, local chats, and model weights (`ai_caches`, `ai_history`, `ai_models`). Named allowlist for Cursor, Claude, Codex, Copilot, Windsurf, and the other tools in the plan. Ollama and LM Studio weights start unchecked.
+- App caches, developer caches, browser profiles beyond Default (Brave, Opera, Vivaldi), and a separate cookies/history module.
+- System disk reclaim (component store, hibernation, shadow-copy cap, upgrade leftovers). `/ResetBase` starts unchecked.
+- Old driver packages that no connected device is using.
+- Docker build-cache prune and WSL virtual-disk compact. Rows start unchecked. The distro is kept.
+- Extra language packs and a few optional features on the Debloat preset. The current display language stays.
+- Checked-row size summary, undo for startup Run keys and service start types, weekly Free disk schedule.
+- Profiles `ai` and `workstation`.
+
+### Notes
+- Free disk includes AI caches and developer caches. It does not include chats, model weights, or WSL compact.
+- Amazon Q, Jan, Hugging Face, ComfyUI, and the other tools listed in plan section 16.6 are still not on the allowlist.
+
 ## [1.3.0] - 2026-10-07
 
 ### Added

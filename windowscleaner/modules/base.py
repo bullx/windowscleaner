@@ -30,6 +30,8 @@ class CleanItem:
     next_step: str = ""
     # Module risk echoed for GUI badges (optional; filled by enrich / GUI)
     risk: str = ""
+    # GUI Clean? mark. Model weights and other one-way rows start unchecked.
+    default_include: bool = True
 
 
 @dataclass

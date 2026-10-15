@@ -86,6 +86,18 @@ def _startup_folder_shortcuts() -> list[tuple[str, Path]]:
 _RUN_PATH = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
 
 
+def _remember_run(hive_name: str, hive: int, name: str) -> None:
+    from windowscleaner.utils.change_undo import remember_run
+
+    access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
+    try:
+        with winreg.OpenKey(hive, _RUN_PATH, 0, access) as key:
+            value, reg_type = winreg.QueryValueEx(key, name)
+    except OSError:
+        return
+    remember_run(hive=hive_name, path=_RUN_PATH, name=name, value=value, reg_type=reg_type)
+
+
 class StartupAppsModule(CleanModule):
     id = "startup_apps"
     label = "Startup Programs"
@@ -186,6 +198,8 @@ class StartupAppsModule(CleanModule):
 
             if item.id.startswith("hkcu_run:"):
                 name = item.id.split(":", 1)[1]
+                if not dry_run:
+                    _remember_run("HKCU", winreg.HKEY_CURRENT_USER, name)
                 ok, err = _delete_run_value(winreg.HKEY_CURRENT_USER, _RUN_PATH, name)
                 if ok:
                     result.actions.append(f"Removed HKCU Run: {name}")
@@ -193,6 +207,8 @@ class StartupAppsModule(CleanModule):
                     result.errors.append(f"{item.id}: {err or 'failed'}")
             elif item.id.startswith("hklm_run:"):
                 name = item.id.split(":", 1)[1]
+                if not dry_run:
+                    _remember_run("HKLM", winreg.HKEY_LOCAL_MACHINE, name)
                 ok, err = _delete_run_value(winreg.HKEY_LOCAL_MACHINE, _RUN_PATH, name)
                 if ok:
                     result.actions.append(f"Removed HKLM Run: {name}")

@@ -26,7 +26,18 @@ from windowscleaner.utils.windows_info import edition_banner_text
 
 console = Console(legacy_windows=False, soft_wrap=True)
 
-PROFILE_CHOICES = ["safe", "standard", "privacy", "oem", "disk", "new_pc", "debloat", "full"]
+PROFILE_CHOICES = [
+    "safe",
+    "standard",
+    "privacy",
+    "oem",
+    "disk",
+    "new_pc",
+    "debloat",
+    "ai",
+    "workstation",
+    "full",
+]
 
 
 def _risk_style(risk: str) -> str:
@@ -279,6 +290,11 @@ def scan_cmd(profile: str, only: Optional[str], exclude: Optional[str], export_p
 @click.option("--dry-run", is_flag=True, help="Show what would happen without changing anything.")
 @click.option("-y", "--yes", is_flag=True, help="Skip confirmation prompt.")
 @click.option("--export", "export_path", default=None, help="Write JSON/TXT report to this path.")
+@click.option(
+    "--confirm-irreversible",
+    is_flag=True,
+    help="Also clean rows that start unchecked (model weights, ResetBase, WSL/Docker).",
+)
 def clean_cmd(
     profile: str,
     only: Optional[str],
@@ -286,6 +302,7 @@ def clean_cmd(
     dry_run: bool,
     yes: bool,
     export_path: Optional[str],
+    confirm_irreversible: bool,
 ) -> None:
     """Clean junk / apply privacy hardening."""
     _print_banner()
@@ -325,7 +342,13 @@ def clean_cmd(
             f"~[bold green]{format_bytes(scan_report.bytes_estimate)}[/bold green] reclaimable\n"
         )
 
-    report = _run_with_progress(lambda cb: cleaner.clean(dry_run=dry_run, progress=cb))
+    report = _run_with_progress(
+        lambda cb: cleaner.clean(
+            dry_run=dry_run,
+            progress=cb,
+            include_unchecked=confirm_irreversible,
+        )
+    )
     _render_report(report, mode="clean")
     if export_path:
         path = save_report(
@@ -365,6 +388,52 @@ def undo_privacy_cmd(dry_run: bool, yes: bool) -> None:
     for m in messages:
         console.print(m)
     console.print(f"\nOk: {ok}  Failed/skipped: {failed}")
+
+
+@main.command("undo-startup")
+@click.option("--dry-run", is_flag=True, help="Show what would be restored.")
+@click.option("-y", "--yes", is_flag=True, help="Skip confirmation.")
+def undo_startup_cmd(dry_run: bool, yes: bool) -> None:
+    """Restore Run-key values and service start types recorded during Clean."""
+    from windowscleaner.utils.change_undo import load_undo as load_change_undo
+    from windowscleaner.utils.change_undo import undo_all as undo_changes
+
+    _print_banner()
+    entries = load_change_undo().get("entries") or []
+    if not entries:
+        console.print("[yellow]No startup or service undo history found.[/yellow]")
+        sys.exit(0)
+    console.print(f"Recorded changes: [bold]{len(entries)}[/bold]")
+    for entry in entries[:20]:
+        console.print(f"  • {entry.get('label') or entry.get('id')}")
+    if not dry_run and not yes:
+        if not click.confirm("Restore these startup and service values?", default=False):
+            console.print("Aborted.")
+            sys.exit(0)
+    ok, failed, messages = undo_changes(dry_run=dry_run)
+    for msg in messages:
+        console.print(msg)
+    console.print(f"\nOk: {ok}  Failed/skipped: {failed}")
+
+
+@main.command("schedule-disk")
+@click.option("-y", "--yes", is_flag=True, help="Skip confirmation.")
+def schedule_disk_cmd(yes: bool) -> None:
+    """Create a weekly Task Scheduler job that runs a Free disk clean."""
+    from windowscleaner.utils.schedule_disk import install_weekly_disk_task
+
+    _print_banner()
+    console.print(
+        "This creates WindowsCleaner-FreeDisk: Sunday 09:00, profile [bold]disk[/bold].\n"
+        "Chats, model weights, and WSL disks stay out of that profile."
+    )
+    if not yes and not click.confirm("Create the scheduled task?", default=False):
+        console.print("Aborted.")
+        sys.exit(0)
+    ok, msg = install_weekly_disk_task()
+    console.print(msg)
+    if not ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

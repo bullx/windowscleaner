@@ -17,7 +17,7 @@ python -m windowscleaner
 python main.py
 ```
 
-In the GUI: pick modules (or **Safe / Standard / Privacy / OEM / Full**, or intent **Free disk / New laptop / Debloat**) → **Scan** → toggle **Clean?** (`[x]`/`[ ]`) per row → **Dry-run** → **Clean**.  
+In the GUI: pick modules (or **Safe / Standard / Privacy / OEM / Full**, or intent **Free disk / New laptop / Debloat / AI tools / Workstation**) → **Scan** → toggle **Clean?** (`[x]`/`[ ]`) per row → **Dry-run** → **Clean**.  
 Use **Restart as Administrator** when privacy/services/system cleanup must stick.
 
 ## What it targets
@@ -26,8 +26,11 @@ Use **Restart as Administrator** when privacy/services/system cleanup must stick
 |--------|----|--------------|------|
 | Temporary Files | `temp_files` | User/system TEMP, recent shortcuts, crash dumps | Safe |
 | Recycle Bin | `recycle_bin` | Empties Recycle Bin | Safe |
-| Browser Caches | `browser_caches` | Edge / Chrome / Firefox caches (not passwords) | Safe |
+| Browser Caches | `browser_caches` | Edge / Chrome / Brave / Opera / Vivaldi / Firefox caches, including extra profiles (not cookies or passwords) | Safe |
+| Browser Cookies & History | `browser_privacy` | Cookies and history (logs you out of sites). Opt-in, not part of Free disk | Moderate (opt-in) |
 | GPU / Shader Caches | `gpu_caches` | DirectX / NVIDIA / AMD / Intel shader caches | Safe |
+| App Caches | `app_caches` | Discord, Slack, Zoom, Teams, Spotify, Steam shader cache, Epic/Battle.net web cache, drive-root driver extracts | Safe |
+| Developer Caches | `dev_caches` | npm, pip, NuGet HTTP cache, Gradle, Go, Yarn, pnpm, Cargo git checkouts | Safe |
 | System & Update Caches | `caches` | Windows Update download cache, Delivery Optimization, thumbnails, Prefetch `*.pf`, WebCache | Moderate |
 | Logs & Crash Dumps | `logs` | CBS/DISM/WU logs, minidumps, `MEMORY.DMP`, WER | Safe |
 | Tracking & Activity Data | `tracking` | Timeline DBs, Search/Cortana leftovers, notifications, clipboard history, Content Delivery caches | Moderate |
@@ -39,21 +42,30 @@ Use **Restart as Administrator** when privacy/services/system cleanup must stick
 | OEM / Win32 Bloat | `bloatware_oem` | HP/Dell/Lenovo AppX families + winget uninstall for SupportAssist / Vantage / Wolf / AV trials | Aggressive (opt-in) |
 | Optional Startup Services | `startup_services` | Fax, Xbox/Game Bar, Game DVR, print spooler, Remote Desktop listener, Phone Link helpers — Disabled or Manual. Never Defender, Update, audio, Wi-Fi, or Windows Hello | Aggressive (opt-in) |
 | Optional Performance Services | `perf_services` | SysMain (Superfetch) + Windows Search indexer — helps some PCs, hurts others | Aggressive (opt-in) |
+| AI Caches & Logs | `ai_caches` | Local caches/logs for Cursor, Claude, Codex, Copilot, Windsurf, Ollama, LM Studio. Not chats or weights | Safe (opt-in; on in Free disk / Full) |
+| AI Chats & Sessions | `ai_history` | Local chats. Settings, skills, and cloud chats stay. Not in Full | Moderate (opt-in) |
+| AI Model Weights | `ai_models` | Ollama and LM Studio weights. Every row starts unchecked | Aggressive (opt-in) |
+| Developer Disks | `dev_disks` | Docker build-cache prune and WSL `ext4.vhdx` compact. Rows start unchecked. Distro is kept | Aggressive (opt-in) |
+| System Disk Reclaim | `system_reclaim` | Component store, hibernation file, smaller System Restore cap, upgrade leftovers. ResetBase starts unchecked | Aggressive (opt-in) |
+| Old Drivers | `driver_store` | Driver packages no connected device is using. In-use driver is not listed | Aggressive (opt-in) |
+| Languages & Optional Features | `windows_features` | Extra language packs, XPS, Steps Recorder, legacy Media Player. Current display language stays | Moderate (Debloat) |
 
 ### Profiles
 
-- **safe** — SAFE modules only (temps, recycle bin, logs, DNS, browser/GPU caches)
+- **safe** — SAFE modules that are on by default (temps, recycle bin, logs, DNS, browser/GPU/app caches)
 - **standard** (default) — space reclaim + tracking wipe + privacy keys + telemetry services (no app uninstalls / no SysMain / no startup apps or startup services)
 - **privacy** — privacy + tracking + telemetry services only
 - **oem** — bloatware AppX + OEM/winget module only
-- **disk** — Free disk intent (temps, recycle, browser/GPU/system caches, logs)
+- **disk** — Free disk (temps, recycle, browser/GPU/app/dev caches, logs, AI caches). Not chats, weights, or WSL compact
+- **workstation** — same module set as Free disk
 - **new_pc** — New laptop intent (privacy + tracking + telemetry + bloat + OEM)
-- **debloat** — bloatware + OEM + optional startup services (review each row before Clean)
-- **full** — everything except optional `perf_services` and `startup_services` (tick those manually)
+- **debloat** — bloatware + OEM + optional startup services + extra languages/features (review each row before Clean)
+- **ai** — AI caches + local chats. Model weights stay a separate checkbox
+- **full** — everything except manual modules: `perf_services`, `startup_services`, `ai_history`, `ai_models`, `system_reclaim`, `driver_store`, `dev_disks`, `windows_features`
 
 ### Debloat: default apps and startup services
 
-**Debloat** selects three opt-in modules. Standard does not. New laptop includes the two app modules and leaves startup services off. Full leaves both startup services and SysMain / Windows Search off until you tick them.
+**Debloat** selects bloatware, OEM/winget, startup services, and extra languages/optional features. Standard does not. New laptop includes the two app modules and leaves startup services off. Full leaves startup services, SysMain / Windows Search, AI chats, model weights, system reclaim, old drivers, and WSL/Docker off until you tick them.
 
 | Piece | Module | What Clean does | Undo |
 |--------|--------|-----------------|------|
@@ -69,10 +81,12 @@ The allowlists live in `windowscleaner/modules/bloatware.py` (`BLOAT`) and `wind
 
 ## GUI features
 
-- Module checkboxes + presets (Safe / Standard / Privacy / OEM / Full) + intent (Free disk / New laptop / Debloat)
+- Module checkboxes + presets (Safe / Standard / Privacy / OEM / Full) + intent (Free disk / New laptop / Debloat / AI tools / Workstation)
 - Results table with **Clean?** (`[x]`/`[ ]`), **Status**, **What to do**, **Risk**, **What it does**, and **Repercussions**
 - After Scan, click **Clean?** to toggle rows so Clean only touches checked items (e.g. keep Xbox, remove Candy Crush)
-- **Export last report** (JSON/TXT) and **Undo privacy changes** (restores recorded previous registry values)
+- **Export last report** (JSON/TXT), **Undo privacy changes**, and **Undo startup & services** (Run keys and service start types)
+- **Schedule Free disk weekly** — Task Scheduler job for the disk profile only
+- Checked-row totals above the table: Safe / Moderate / Aggressive
 - Edition honesty banner (Home may still send Required diagnostic data)
 - Extra confirmation when **Windows.old** is in Clean scope
 - Pre-Clean prompt lists Admin-needed modules by name

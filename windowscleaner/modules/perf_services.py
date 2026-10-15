@@ -127,6 +127,10 @@ class PerfServicesModule(CleanModule):
                 result.actions.append(f"Would disable service {name}")
                 continue
             _run(["sc", "stop", name])
+            from windowscleaner.utils.change_undo import remember_service
+
+            start, _state = _service_state(name)
+            remember_service(name=name, start_text=start)
             cfg = _run(["sc", "config", name, "start=", "disabled"])
             if cfg.returncode == 0:
                 result.actions.append(f"Disabled service {name}")

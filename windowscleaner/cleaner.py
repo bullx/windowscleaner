@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
 
 from windowscleaner.modules.base import CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk
@@ -58,10 +59,13 @@ def select_modules(
       standard  - default modules (space + privacy + telemetry; no opt-in aggressives)
       privacy   - privacy hardening + tracking wipe + telemetry services/tasks
       oem       - bloatware AppX + OEM/winget module only
-      disk      - space reclaim (temps, caches, logs, recycle)
+      disk      - space reclaim, including app/dev caches and AI caches (not chats or weights)
       new_pc    - privacy + tracking + telemetry + bloat + OEM (new laptop intent)
-      debloat   - bloatware + OEM + optional startup services (review rows before Clean)
-      full      - everything except perf_services and startup_services (those stay manual)
+      debloat   - bloatware + OEM + startup services + extra Windows features
+      ai        - AI caches + local chats (not model weights)
+      workstation - same disk set: space reclaim, dev caches, and AI caches
+      full      - everything except manual modules (perf, startup services, AI chats/weights,
+                  system reclaim, old drivers, WSL/Docker, Windows features)
     """
     from windowscleaner.modules import MANUAL_PRESET_IDS, OPT_IN_MODULE_IDS, all_modules
 
@@ -76,6 +80,9 @@ def select_modules(
         "gpu_caches",
         "caches",
         "logs",
+        "app_caches",
+        "dev_caches",
+        "ai_caches",
     }
     new_pc_ids = {
         "privacy",
@@ -88,7 +95,9 @@ def select_modules(
         "bloatware",
         "bloatware_oem",
         "startup_services",
+        "windows_features",
     }
+    ai_ids = {"ai_caches", "ai_history"}
 
     for mod in all_modules():
         if only_set:
@@ -108,7 +117,7 @@ def select_modules(
         elif profile == "oem":
             if mod.id in {"bloatware", "bloatware_oem"}:
                 selected.append(mod)
-        elif profile == "disk":
+        elif profile == "disk" or profile == "workstation":
             if mod.id in disk_ids:
                 selected.append(mod)
         elif profile == "new_pc":
@@ -116,6 +125,9 @@ def select_modules(
                 selected.append(mod)
         elif profile == "debloat":
             if mod.id in debloat_ids:
+                selected.append(mod)
+        elif profile == "ai":
+            if mod.id in ai_ids:
                 selected.append(mod)
         elif profile == "full":
             if mod.id not in MANUAL_PRESET_IDS:
@@ -158,6 +170,7 @@ class Cleaner:
         dry_run: bool = False,
         progress: ProgressCb | None = None,
         only_ids: dict[str, set[str]] | None = None,
+        include_unchecked: bool = False,
     ) -> CleanReport:
         """
         only_ids: optional map module_id -> set of item ids to clean.
@@ -174,7 +187,13 @@ class Cleaner:
                 mod_only = only_ids.get(mod.id, set())
             try:
                 result = enrich_result(
-                    mod.clean(dry_run=dry_run, progress=progress, only_ids=mod_only)
+                    _call_clean(
+                        mod,
+                        dry_run=dry_run,
+                        progress=progress,
+                        only_ids=mod_only,
+                        include_unchecked=include_unchecked,
+                    )
                 )
                 for item in result.items:
                     if not item.risk:
@@ -236,3 +255,21 @@ class Cleaner:
             )
 
         return report
+
+
+def _call_clean(
+    mod: CleanModule,
+    *,
+    dry_run: bool,
+    progress: ProgressCb | None,
+    only_ids: OnlyIds,
+    include_unchecked: bool,
+) -> ModuleResult:
+    kwargs: dict[str, object] = {
+        "dry_run": dry_run,
+        "progress": progress,
+        "only_ids": only_ids,
+    }
+    if "include_unchecked" in inspect.signature(mod.clean).parameters:
+        kwargs["include_unchecked"] = include_unchecked
+    return mod.clean(**kwargs)  # type: ignore[arg-type]

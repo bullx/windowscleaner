@@ -18,8 +18,11 @@ MODULE_KIND: dict[str, str] = {
     "temp_files": "ephemeral",
     "recycle_bin": "ephemeral",
     "browser_caches": "ephemeral",
+    "browser_privacy": "ephemeral",
     "gpu_caches": "ephemeral",
     "caches": "ephemeral",
+    "app_caches": "ephemeral",
+    "dev_caches": "ephemeral",
     "logs": "ephemeral",
     "tracking": "ephemeral",
     "network_cache": "maintenance",
@@ -30,6 +33,13 @@ MODULE_KIND: dict[str, str] = {
     "perf_services": "sticky",
     "startup_apps": "sticky",
     "startup_services": "sticky",
+    "ai_caches": "ephemeral",
+    "ai_history": "ephemeral",
+    "ai_models": "sticky",
+    "dev_disks": "ephemeral",
+    "system_reclaim": "sticky",
+    "driver_store": "sticky",
+    "windows_features": "sticky",
 }
 
 # Modules where nearly every fix needs elevation (sticky policy / services / uninstall)
@@ -40,6 +50,9 @@ ADMIN_MODULES = {
     "bloatware_oem",
     "perf_services",
     "startup_services",
+    "system_reclaim",
+    "driver_store",
+    "windows_features",
 }
 
 # Statuses that mean "do not override with verify Fixed unless gone"

@@ -84,14 +84,16 @@ main.py / windowscleaner/__main__.py
 | `standard` | all default_enabled except opt-in (`bloatware`, `bloatware_oem`, `perf_services`, `startup_apps`, `startup_services`) |
 | `privacy` | `privacy`, `tracking`, `telemetry_services` |
 | `oem` | `bloatware` + `bloatware_oem` only |
-| `disk` | space reclaim: temps, recycle, browser/GPU/system caches, logs |
+| `disk` | space reclaim: temps, recycle, browser/GPU/system/app/dev caches, logs, AI caches |
+| `workstation` | same as `disk` |
 | `new_pc` | privacy + tracking + telemetry + bloat + OEM |
-| `debloat` | `bloatware` + `bloatware_oem` + `startup_services` |
-| `full` | every module except `perf_services` and `startup_services` (manual tick) |
+| `debloat` | `bloatware` + `bloatware_oem` + `startup_services` + `windows_features` |
+| `ai` | `ai_caches` + `ai_history` (not model weights) |
+| `full` | every module except manual ids (`perf_services`, `startup_services`, `ai_history`, `ai_models`, `system_reclaim`, `driver_store`, `dev_disks`, `windows_features`) |
 
 ### Module IDs
 
-`temp_files`, `recycle_bin`, `browser_caches`, `gpu_caches`, `caches`, `logs`, `tracking`, `network_cache`, `privacy`, `telemetry_services`, `startup_apps`, `bloatware`, `bloatware_oem`, `startup_services`, `perf_services`
+`temp_files`, `recycle_bin`, `browser_caches`, `browser_privacy`, `gpu_caches`, `caches`, `app_caches`, `dev_caches`, `logs`, `tracking`, `network_cache`, `privacy`, `telemetry_services`, `startup_apps`, `bloatware`, `bloatware_oem`, `startup_services`, `perf_services`, `ai_caches`, `ai_history`, `ai_models`, `dev_disks`, `system_reclaim`, `driver_store`, `windows_features`
 
 ## Important design decisions
 
@@ -127,7 +129,7 @@ main.py / windowscleaner/__main__.py
 - `network_cache` is a flush action; scan does not pretend it is reclaimable junk every time
 - Status engine: `utils/item_status.py`
   - `MODULE_KIND`: ephemeral vs sticky vs maintenance
-  - `ADMIN_MODULES`: `privacy`, `telemetry_services`, `bloatware`, `bloatware_oem`, `perf_services`, `startup_services` (scan labeling)
+  - `ADMIN_MODULES`: `privacy`, `telemetry_services`, `bloatware`, `bloatware_oem`, `perf_services`, `startup_services`, `system_reclaim`, `driver_store`, `windows_features` (scan labeling)
   - History: `%LOCALAPPDATA%\WindowsCleaner\last_clean.json`
 - **Cleaner does not silently skip whole modules** — each module handles Admin per item
 - `caches.requires_admin = False` at module level so thumbnails/WebCache can clean without elevation; WU/DO/prefetch items still `requires_admin=True` per item
@@ -192,6 +194,9 @@ main.py / windowscleaner/__main__.py
 | Startup Run / folder | `modules/startup_apps.py` |
 | Optional SysMain/WSearch | `modules/perf_services.py` |
 | Optional startup RAM services | `modules/startup_services.py` |
+| AI caches / chats / weights | `modules/ai_caches.py`, `ai_history.py`, `ai_models.py`, `ai_targets.py` |
+| App / dev caches, WSL compact | `modules/app_caches.py`, `dev_caches.py`, `dev_disks.py` |
+| Component store, old drivers, languages | `modules/system_reclaim.py`, `driver_store.py`, `windows_features.py` |
 | Services/tasks | `modules/telemetry_services.py` |
 | Profiles | `cleaner.py` `select_modules` |
 | UI behavior | `ui/gui.py` |
@@ -203,6 +208,9 @@ main.py / windowscleaner/__main__.py
 
 - Disable Windows Defender / wuauserv as a “tweak”
 - Add Defender, Update, firewall, audio, Wi-Fi, Bluetooth, Windows Hello, or Hyper-V/WSL services to `startup_services`
+- Delete in-use driver packages, or put `/ResetBase` on by default
+- Put AI chats, model weights, or WSL compact on the Free disk / standard profiles
+- Search the disk for “AI” folders. Clean only the named allowlist
 - Force-remove Edge / break WinRE / resize partitions
 - Reintroduce silent whole-module Admin skips (items must appear with Failed — Needs Admin)
 - Fake Clean success without verify, or remove Fixed / Not fixed / Still present

@@ -41,7 +41,83 @@ ITEM_INFO: dict[str, dict[str, tuple[str, str]]] = {
     "browser_caches": {
         "_default": (
             "Deletes browser cache files (images, scripts, etc.).",
-            "Sites may load slower once. Bookmarks, passwords, and extensions are kept. Close the browser first.",
+            "Sites may load slower once. Cookies, history, bookmarks, and passwords are kept. Close the browser first.",
+        ),
+    },
+    "browser_privacy": {
+        "_default": (
+            "Deletes cookies and browsing history.",
+            "Logs you out of websites. Bookmarks stay. Not part of Free disk.",
+        ),
+    },
+    "app_caches": {
+        "_default": (
+            "Deletes regenerating app cache files.",
+            "Login databases and installs stay. Quit the app first. Driver extracts at the drive root do not come back on their own.",
+        ),
+    },
+    "dev_caches": {
+        "_default": (
+            "Deletes a developer tool cache.",
+            "The next build can re-download it. Project folders, node_modules, Cargo registry sources, and NuGet packages stay.",
+        ),
+    },
+    "ai_caches": {
+        "_default": (
+            "Deletes local AI tool caches and logs.",
+            "The app recreates caches. Logins, skills, settings, and the install stay. Quit the app first.",
+        ),
+    },
+    "ai_history": {
+        "_default": (
+            "Deletes local chats and session files.",
+            "Local chats are forgotten. Project source, settings, and credentials stay. Cloud chats are not touched.",
+        ),
+    },
+    "ai_models": {
+        "_default": (
+            "Deletes downloaded model weights.",
+            "The weights must be downloaded again. The app stays installed. This row starts unchecked.",
+        ),
+        "ollama_models": (
+            "Deletes Ollama model weights under .ollama\\models.",
+            "You must pull the models again. The Ollama install, keys, and config stay.",
+        ),
+        "lmstudio_models": (
+            "Deletes LM Studio model files under .lmstudio\\models and hub.",
+            "You must download the models again. Settings, credentials, and the install stay.",
+        ),
+    },
+    "dev_disks": {
+        "_default": (
+            "Shrinks a developer virtual disk or Docker build cache.",
+            "The WSL distro is kept. Docker images you did not include stay. Rows start unchecked.",
+        ),
+    },
+    "system_reclaim": {
+        "_default": (
+            "Reclaims Windows system disk space.",
+            "Needs Administrator. ResetBase and a full restore-point wipe are not the default.",
+        ),
+        "component_store_resetbase": (
+            "Runs DISM component-store cleanup with /ResetBase.",
+            "Windows can no longer uninstall the updates this removes. Starts unchecked.",
+        ),
+        "hiberfil": (
+            "Turns hibernation off.",
+            "Fast Startup turns off too. Sleep still works. Re-enable with powercfg -h on.",
+        ),
+    },
+    "driver_store": {
+        "_default": (
+            "Removes a driver package no connected device is using.",
+            "One-way. The in-use driver is not listed. Reinstall the vendor driver if hardware needs this package later.",
+        ),
+    },
+    "windows_features": {
+        "_default": (
+            "Removes an extra language pack or optional feature.",
+            "The current display language is not offered. Reinstall later from Settings. SMB1, .NET, and Hyper-V are not targets.",
         ),
     },
     "gpu_caches": {

@@ -17,6 +17,9 @@ broken apps, lost OEM utilities, failed rollbacks, or any other damage.
 
 What this tool can do
   • Delete temporary files, caches, logs, Recycle Bin contents, and (if present) Windows.old
+  • Optionally delete local AI caches, chats, or downloaded model weights (weights start unchecked)
+  • Optionally compact a WSL virtual disk or prune Docker build cache (the distro stays)
+  • Optionally clean the component store, hibernation file, or old unused drivers
   • Change privacy / AI / telemetry registry and policy settings
   • Disable services and scheduled tasks
   • Uninstall Store (AppX) apps and deprovision them for new users

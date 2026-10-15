@@ -72,10 +72,34 @@ PROFILE_IDS = {
     "privacy": lambda m: m.id in {"privacy", "tracking", "telemetry_services"},
     "oem": lambda m: m.id in {"bloatware", "bloatware_oem"},
     "disk": lambda m: m.id
-    in {"temp_files", "recycle_bin", "browser_caches", "gpu_caches", "caches", "logs"},
+    in {
+        "temp_files",
+        "recycle_bin",
+        "browser_caches",
+        "gpu_caches",
+        "caches",
+        "logs",
+        "app_caches",
+        "dev_caches",
+        "ai_caches",
+    },
     "new_pc": lambda m: m.id
     in {"privacy", "tracking", "telemetry_services", "bloatware", "bloatware_oem"},
-    "debloat": lambda m: m.id in {"bloatware", "bloatware_oem", "startup_services"},
+    "debloat": lambda m: m.id
+    in {"bloatware", "bloatware_oem", "startup_services", "windows_features"},
+    "ai": lambda m: m.id in {"ai_caches", "ai_history"},
+    "workstation": lambda m: m.id
+    in {
+        "temp_files",
+        "recycle_bin",
+        "browser_caches",
+        "gpu_caches",
+        "caches",
+        "logs",
+        "app_caches",
+        "dev_caches",
+        "ai_caches",
+    },
     "full": lambda m: m.id not in MANUAL_PRESET_IDS,
 }
 
@@ -352,6 +376,12 @@ class WindowsCleanerApp(tk.Tk):
         ).pack(side=tk.LEFT, padx=(0, 4))
         ttk.Button(
             intent_row, text="Debloat", command=lambda: self._apply_profile("debloat"), width=10
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(
+            intent_row, text="AI tools", command=lambda: self._apply_profile("ai"), width=10
+        ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(
+            intent_row, text="Workstation", command=lambda: self._apply_profile("workstation"), width=12
         ).pack(side=tk.LEFT)
 
         box = ttk.LabelFrame(parent, text="Modules", padding=8)
@@ -470,6 +500,14 @@ class WindowsCleanerApp(tk.Tk):
         self.export_btn.pack(fill=tk.X, pady=2)
         self.undo_privacy_btn = ttk.Button(parent, text="Undo privacy changes…", command=self._on_undo_privacy)
         self.undo_privacy_btn.pack(fill=tk.X, pady=2)
+        self.undo_changes_btn = ttk.Button(
+            parent, text="Undo startup & services…", command=self._on_undo_changes
+        )
+        self.undo_changes_btn.pack(fill=tk.X, pady=2)
+        self.schedule_btn = ttk.Button(
+            parent, text="Schedule Free disk weekly…", command=self._on_schedule_disk
+        )
+        self.schedule_btn.pack(fill=tk.X, pady=2)
 
         self.progress = ttk.Progressbar(parent, mode="indeterminate")
         self.progress.pack(fill=tk.X, pady=(10, 4))
@@ -869,6 +907,8 @@ class WindowsCleanerApp(tk.Tk):
             self.elevate_btn,
             self.export_btn,
             self.undo_privacy_btn,
+            self.undo_changes_btn,
+            self.schedule_btn,
         ):
             btn.configure(state=state)
         if busy:
@@ -907,6 +947,7 @@ class WindowsCleanerApp(tk.Tk):
         data["include"] = CHECK_OFF if on else CHECK_ON
         values = tuple(data.get(c, "") for c in RESULT_COLUMNS)
         self.tree.item(row, values=values)
+        self._refresh_checked_summary()
 
     def _set_all_includes(self, included: bool) -> None:
         mark = CHECK_ON if included else CHECK_OFF
@@ -915,6 +956,7 @@ class WindowsCleanerApp(tk.Tk):
                 continue
             data["include"] = mark
             self.tree.item(iid, values=tuple(data.get(c, "") for c in RESULT_COLUMNS))
+        self._refresh_checked_summary()
 
     def _collect_only_ids(self) -> dict[str, set[str]] | None:
         """
@@ -930,6 +972,46 @@ class WindowsCleanerApp(tk.Tk):
                 continue
             mapping.setdefault(mod_id, set()).add(item_id)
         return mapping
+
+    def _checked_risk_totals(self) -> dict[str, int]:
+        totals = {"safe": 0, "moderate": 0, "aggressive": 0}
+        if self._last_report is None:
+            return totals
+        included: set[tuple[str, str]] = set()
+        for iid, key in self._item_keys.items():
+            data = self._row_data.get(iid) or {}
+            if data.get("include") == CHECK_ON:
+                included.add(key)
+        for result in self._last_report.results:
+            for item in result.items:
+                if (result.module_id, item.id) not in included:
+                    continue
+                bucket = (item.risk or "safe").lower()
+                if bucket not in totals:
+                    bucket = "safe"
+                totals[bucket] += int(item.bytes_estimate or 0)
+        return totals
+
+    def _checked_risk_text(self) -> str:
+        totals = self._checked_risk_totals()
+        return (
+            f"Checked Safe {format_bytes(totals['safe'])}"
+            f" | Moderate {format_bytes(totals['moderate'])}"
+            f" | Aggressive {format_bytes(totals['aggressive'])}"
+        )
+
+    def _refresh_checked_summary(self) -> None:
+        if self._last_mode != "scan" or self._last_report is None:
+            return
+        report = self._last_report
+        n_inc = sum(1 for iid in self._item_keys if (self._row_data.get(iid) or {}).get("include") == CHECK_ON)
+        self.summary_var.set(
+            f"Found {report.item_count} item(s)  |  "
+            f"Estimated reclaimable: {format_bytes(report.bytes_estimate)}  |  "
+            f"{self._checked_risk_text()}  |  "
+            f"Errors: {report.error_count}  |  "
+            f"Click Clean? ([x] / [ ]) to choose what Clean will touch ({n_inc} checked)"
+        )
 
     def _on_export(self) -> None:
         if self._last_report is None:
@@ -993,6 +1075,52 @@ class WindowsCleanerApp(tk.Tk):
             "See Activity log for detail. Run Scan to verify.",
         )
 
+    def _on_undo_changes(self) -> None:
+        from windowscleaner.utils.change_undo import load_undo as load_change_undo
+        from windowscleaner.utils.change_undo import undo_all as undo_changes
+
+        data = load_change_undo()
+        entries = data.get("entries") or []
+        if not entries:
+            messagebox.showinfo(
+                __app_name__,
+                "No startup or service undo history yet.\n\n"
+                "Clean records Run-key values and service start types before it changes them.",
+            )
+            return
+        preview = "\n".join(f"  • {e.get('label') or e.get('id')}" for e in entries[:15])
+        if not messagebox.askyesno(
+            __app_name__,
+            "Restore recorded startup Run values and service start types?\n\n"
+            f"{len(entries)} change(s):\n{preview}\n\n"
+            "Service changes need Administrator. App uninstalls and driver removal stay one-way.",
+            icon=messagebox.WARNING,
+        ):
+            return
+        ok, failed, messages = undo_changes(dry_run=False)
+        for msg in messages[:40]:
+            self._log(msg)
+        messagebox.showinfo(__app_name__, f"Undo finished.\n\nRestored/ok: {ok}\nFailed/skipped: {failed}")
+
+    def _on_schedule_disk(self) -> None:
+        from windowscleaner.utils.schedule_disk import install_weekly_disk_task
+
+        if not messagebox.askyesno(
+            __app_name__,
+            "Create a weekly Task Scheduler job for Sunday 09:00?\n\n"
+            "It runs a Free disk clean (temps, caches, developer caches, AI caches). "
+            "It does not delete chats, model weights, or WSL disks.\n\n"
+            "Remove it later in Task Scheduler (WindowsCleaner-FreeDisk).",
+            icon=messagebox.WARNING,
+        ):
+            return
+        ok, msg = install_weekly_disk_task()
+        self._log(msg)
+        if ok:
+            messagebox.showinfo(__app_name__, msg)
+        else:
+            messagebox.showerror(__app_name__, msg)
+
     def _log(self, msg: str) -> None:
         self.log.configure(state=tk.NORMAL)
         self.log.insert(tk.END, msg + "\n")
@@ -1032,7 +1160,7 @@ class WindowsCleanerApp(tk.Tk):
                     risk = (item.risk or "").upper() or "-"
                     self._insert_row(
                         {
-                            "include": CHECK_ON,
+                            "include": CHECK_ON if item.default_include else CHECK_OFF,
                             "status": item.status or "-",
                             "next_step": item.next_step or "-",
                             "risk": risk,
@@ -1102,6 +1230,7 @@ class WindowsCleanerApp(tk.Tk):
             self.summary_var.set(
                 f"Found {report.item_count} item(s)  |  "
                 f"Estimated reclaimable: {format_bytes(report.bytes_estimate)}  |  "
+                f"{self._checked_risk_text()}  |  "
                 f"Errors: {report.error_count}  |  "
                 f"Click Clean? ([x] / [ ]) to choose what Clean will touch ({n_inc} selectable)"
             )
@@ -1263,6 +1392,9 @@ class WindowsCleanerApp(tk.Tk):
                 "perf_services",
                 "startup_apps",
                 "startup_services",
+                "system_reclaim",
+                "driver_store",
+                "windows_features",
             }
         ]
         needs_admin = bool(admin_needed_mods)
@@ -1289,6 +1421,10 @@ class WindowsCleanerApp(tk.Tk):
                 relaunch_as_admin()
                 self.destroy()
                 return
+
+        # One-way rows that start unchecked: model weights, ResetBase, WSL/Docker.
+        if not dry_run and not self._confirm_unchecked_rows(modules, only_ids):
+            return
 
         # Windows.old hard confirm when that item is in scope
         if not dry_run and self._windows_old_in_scope(modules, only_ids):
@@ -1368,6 +1504,38 @@ class WindowsCleanerApp(tk.Tk):
                     return any(i.id == "windows_old" for i in r.items)
         return False
 
+    def _confirm_unchecked_rows(
+        self,
+        modules: list[CleanModule],
+        only_ids: dict[str, set[str]] | None,
+    ) -> bool:
+        if self._last_report is None:
+            return True
+        selected = {m.id for m in modules}
+        lines: list[str] = []
+        for result in self._last_report.results:
+            if result.module_id not in selected:
+                continue
+            for item in result.items:
+                if only_ids is not None and item.id not in only_ids.get(result.module_id, set()):
+                    continue
+                risky = result.module_id in {"ai_models", "dev_disks"} or item.id == "component_store_resetbase"
+                if not risky:
+                    continue
+                lines.append(f"  • {item.label} ({format_bytes(item.bytes_estimate)})")
+        if not lines:
+            return True
+        return messagebox.askyesno(
+            __app_name__,
+            "These rows start unchecked because they are hard to undo:\n\n"
+            + "\n".join(lines)
+            + "\n\nModel weights must be downloaded again. "
+            "ResetBase means Windows can no longer uninstall those updates. "
+            "WSL compact keeps the distro and only shrinks the virtual disk.\n\n"
+            "Continue?",
+            icon=messagebox.WARNING,
+        )
+
     def _on_elevate(self) -> None:
         if is_admin():
             messagebox.showinfo(__app_name__, "Already running as Administrator.")
@@ -1388,6 +1556,9 @@ class WindowsCleanerApp(tk.Tk):
                 "perf_services",
                 "startup_apps",
                 "startup_services",
+                "system_reclaim",
+                "driver_store",
+                "windows_features",
             }
         ]
         detail = "\n".join(f"  • {n}" for n in adminish) if adminish else "  • (current selection)"

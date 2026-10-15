@@ -1,67 +1,138 @@
-"""Browser cache cleanup (Edge / Chrome / Firefox) - community cleaner staple."""
+"""Browser cache cleanup. Cookies, history, and passwords are a different module."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from windowscleaner.modules.base import CleanItem, CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk, allow_item, filter_items
-from windowscleaner.utils.fs import clear_directory_contents, merge_results
-from windowscleaner.utils.size import path_size
+from windowscleaner.modules.base import CleanModule, ModuleResult, OnlyIds, ProgressCb, Risk
+from windowscleaner.modules.path_rows import PathPlan, clean_plans, scan_plans
+
+# Cache folders only. Cookies, History, Login Data, and Web Data are never listed.
+CACHE_DIR_NAMES = (
+    "Cache",
+    "Code Cache",
+    "GPUCache",
+    "GraphiteDawnCache",
+    "DawnGraphiteCache",
+    "DawnWebGPUCache",
+    "cache2",
+)
+
+_NEVER = frozenset(
+    {
+        "cookies",
+        "history",
+        "login data",
+        "web data",
+        "bookmarks",
+        "preferences",
+    }
+)
 
 
-def _targets() -> list[tuple[str, str, Path]]:
-    local = Path(os.environ.get("LOCALAPPDATA", ""))
-    roaming = Path(os.environ.get("APPDATA", ""))
-    return [
-        ("edge_cache", "Edge Cache", local / r"Microsoft\Edge\User Data\Default\Cache"),
-        ("edge_code", "Edge Code Cache", local / r"Microsoft\Edge\User Data\Default\Code Cache"),
-        ("edge_gpu", "Edge GPU Cache", local / r"Microsoft\Edge\User Data\Default\GPUCache"),
-        (
-            "edge_gpucache_service",
-            "Edge GraphiteDawnCache",
-            local / r"Microsoft\Edge\User Data\Default\GraphiteDawnCache",
-        ),
-        ("chrome_cache", "Chrome Cache", local / r"Google\Chrome\User Data\Default\Cache"),
-        ("chrome_code", "Chrome Code Cache", local / r"Google\Chrome\User Data\Default\Code Cache"),
-        ("chrome_gpu", "Chrome GPU Cache", local / r"Google\Chrome\User Data\Default\GPUCache"),
-        ("firefox_cache", "Firefox cache2", roaming / r"Mozilla\Firefox\Profiles"),
-    ]
+def _local() -> Path:
+    return Path(os.environ.get("LOCALAPPDATA") or "")
 
 
-def _firefox_size(profiles: Path) -> int:
-    if not profiles.exists():
-        return 0
-    total = 0
-    for profile in profiles.iterdir():
-        if profile.is_dir():
-            total += path_size(profile / "cache2")
-    return total
+def _roaming() -> Path:
+    return Path(os.environ.get("APPDATA") or "")
+
+
+def _is_profile(path: Path) -> bool:
+    name = path.name
+    return name == "Default" or name.startswith("Profile ") or name == "Guest Profile"
+
+
+def _cache_dirs(profile: Path) -> list[Path]:
+    found: list[Path] = []
+    try:
+        if not profile.is_dir():
+            return found
+        present = {child.name.lower(): child for child in profile.iterdir()}
+    except OSError:
+        return found
+    for name in CACHE_DIR_NAMES:
+        hit = present.get(name.lower())
+        if hit is None or hit.name.lower() in _NEVER:
+            continue
+        if hit.is_dir():
+            found.append(hit)
+    return found
+
+
+def _chromium_caches(user_data: Path) -> list[Path]:
+    found: list[Path] = []
+    try:
+        if not user_data.is_dir():
+            return found
+        profiles = [child for child in user_data.iterdir() if child.is_dir() and _is_profile(child)]
+    except OSError:
+        return found
+    for profile in profiles:
+        found.extend(_cache_dirs(profile))
+    return found
+
+
+def _opera_caches(root: Path) -> list[Path]:
+    return _cache_dirs(root)
+
+
+def _firefox_caches(profiles: Path) -> list[Path]:
+    found: list[Path] = []
+    try:
+        if not profiles.is_dir():
+            return found
+        for profile in profiles.iterdir():
+            cache2 = profile / "cache2"
+            if cache2.is_dir():
+                found.append(cache2)
+    except OSError:
+        return found
+    return found
+
+
+def browser_cache_plans() -> list[PathPlan]:
+    local = _local()
+    roaming = _roaming()
+    browsers = (
+        ("edge_cache", "Edge caches", _chromium_caches(local / "Microsoft" / "Edge" / "User Data")),
+        ("chrome_cache", "Chrome caches", _chromium_caches(local / "Google" / "Chrome" / "User Data")),
+        ("brave_cache", "Brave caches", _chromium_caches(local / "BraveSoftware" / "Brave-Browser" / "User Data")),
+        ("vivaldi_cache", "Vivaldi caches", _chromium_caches(local / "Vivaldi" / "User Data")),
+        ("opera_cache", "Opera caches", _opera_caches(roaming / "Opera Software" / "Opera Stable")),
+        ("opera_gx_cache", "Opera GX caches", _opera_caches(roaming / "Opera Software" / "Opera GX Stable")),
+        ("firefox_cache", "Firefox caches", _firefox_caches(roaming / "Mozilla" / "Firefox" / "Profiles")),
+    )
+    rows: list[PathPlan] = []
+    for item_id, label, paths in browsers:
+        if not paths:
+            continue
+        rows.append(
+            PathPlan(
+                id=item_id,
+                label=label,
+                paths=paths,
+                effect="Deletes browser cache files (images, scripts, compiled pages).",
+                repercussions="Sites may load slower once. Cookies, history, bookmarks, and passwords stay.",
+            )
+        )
+    return rows
 
 
 class BrowserCachesModule(CleanModule):
     id = "browser_caches"
     label = "Browser Caches"
     description = (
-        "Clears Edge / Chrome / Firefox cache folders (not bookmarks or passwords). "
-        "Close browsers first for best results. Common target in community cleaners."
+        "Edge, Chrome, Brave, Opera, Vivaldi, and Firefox cache folders, including extra profiles. "
+        "Does not delete cookies, history, bookmarks, or passwords."
     )
     risk = Risk.SAFE
     requires_admin = False
     default_enabled = True
 
     def scan(self, progress: ProgressCb | None = None) -> ModuleResult:
-        result = ModuleResult(module_id=self.id, label=self.label)
-        for item_id, label, path in _targets():
-            if progress:
-                progress(f"Scanning {label}")
-            size = _firefox_size(path) if item_id == "firefox_cache" else path_size(path)
-            if size <= 0:
-                continue
-            result.items.append(
-                CleanItem(id=item_id, label=label, detail=str(path), bytes_estimate=size)
-            )
-        return result
+        return scan_plans(self, browser_cache_plans(), progress)
 
     def clean(
         self,
@@ -70,38 +141,10 @@ class BrowserCachesModule(CleanModule):
         progress: ProgressCb | None = None,
         only_ids: OnlyIds = None,
     ) -> ModuleResult:
-        if dry_run:
-            result = self.scan(progress)
-            result.items = filter_items(result.items, only_ids)
-            result.dry_run = True
-            result.bytes_freed = result.bytes_estimate
-            for item in result.items:
-                result.actions.append(f"Would clean {item.label}")
-            return result
-
-        result = ModuleResult(module_id=self.id, label=self.label, dry_run=False)
-        results = []
-        for item_id, label, path in _targets():
-            if not allow_item(item_id, only_ids):
-                continue
-            try:
-                if not path.exists():
-                    continue
-            except OSError:
-                continue
-            result.items.append(CleanItem(id=item_id, label=label, detail=str(path)))
-            if progress:
-                progress(f"Cleaning {label}")
-            if item_id == "firefox_cache":
-                for profile in path.iterdir():
-                    cache2 = profile / "cache2"
-                    if cache2.is_dir():
-                        results.append(clear_directory_contents(cache2, dry_run=False))
-            else:
-                results.append(clear_directory_contents(path, dry_run=False))
-            result.actions.append(f"Cleaned {label}")
-        merged = merge_results(*results) if results else None
-        if merged:
-            result.bytes_freed = merged.bytes_freed
-            result.errors.extend(merged.errors)
-        return result
+        return clean_plans(
+            self,
+            browser_cache_plans(),
+            dry_run=dry_run,
+            progress=progress,
+            only_ids=only_ids,
+        )
