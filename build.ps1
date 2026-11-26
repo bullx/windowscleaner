@@ -1,24 +1,24 @@
-# Build portable WindowsCleaner.exe (no Python needed for end users)
+# Publish a self-contained WindowsCleaner.exe (no separate .NET install for the recipient).
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "Installing build dependencies..."
-python -m pip install -r requirements.txt pyinstaller -q
+$out = Join-Path $PSScriptRoot "dist"
+if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 
-Write-Host "Building WindowsCleaner.exe ..."
-python -m PyInstaller --noconfirm --clean windowscleaner.spec
+dotnet publish "src\WindowsCleaner.App\WindowsCleaner.App.csproj" `
+    -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true `
+    -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $out
 
-$exe = Join-Path $PSScriptRoot "dist\WindowsCleaner.exe"
+$exe = Join-Path $out "WindowsCleaner.exe"
 if (-not (Test-Path $exe)) { throw "Build failed: $exe not found" }
 
-$zip = Join-Path $PSScriptRoot "dist\WindowsCleaner-portable.zip"
-if (Test-Path $zip) { Remove-Item $zip -Force }
+$zip = Join-Path $out "WindowsCleaner-portable.zip"
 Compress-Archive -Path $exe -DestinationPath $zip -Force
 
 Write-Host ""
 Write-Host "Done. Share either:"
 Write-Host "  $exe"
 Write-Host "  $zip"
-Write-Host ""
-Write-Host "End users: extract/run WindowsCleaner.exe - no Python required."
-Write-Host "For privacy/services cleanup: use Restart as Administrator (UAC)."
+Write-Host "End users run WindowsCleaner.exe. For privacy, services, and bloat: Restart as Administrator."

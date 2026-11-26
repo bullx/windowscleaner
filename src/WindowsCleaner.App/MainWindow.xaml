@@ -1,0 +1,187 @@
+<Window x:Class="WindowsCleaner.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:WindowsCleaner.App"
+        Title="Windows Cleaner" Height="860" Width="1280" MinHeight="680" MinWidth="1024"
+        WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <local:RiskBrushConverter x:Key="RiskBrush"/>
+    <local:StatusBrushConverter x:Key="StatusBrush"/>
+  </Window.Resources>
+  <Grid Margin="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,0,12">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel>
+          <TextBlock Text="Windows Cleaner" FontSize="22" FontWeight="SemiBold" Foreground="{StaticResource Primary}"/>
+          <TextBlock x:Name="Subtitle" Margin="0,4,0,0" Foreground="{StaticResource MutedFg}"/>
+          <Border Margin="0,8,0,0" Background="{StaticResource Muted}" CornerRadius="4" Padding="8,6" HorizontalAlignment="Left">
+            <TextBlock x:Name="EditionBanner" TextWrapping="Wrap" MaxWidth="720" Foreground="{StaticResource Fg}"/>
+          </Border>
+        </StackPanel>
+        <StackPanel Grid.Column="1" VerticalAlignment="Top">
+          <Border x:Name="AdminPill" CornerRadius="4" Padding="8,4" BorderThickness="1" HorizontalAlignment="Right" Background="{StaticResource Card}">
+            <TextBlock x:Name="AdminLabel" FontWeight="SemiBold"/>
+          </Border>
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button Content="How this works" Click="ShowHow" Margin="0,0,8,0"/>
+            <Button Content="Disclaimer" Click="ShowDisclaimer"/>
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="300"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <Border Grid.Column="0" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,0,12,0">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="Modules" Style="{StaticResource CardTitle}"/>
+          <TextBlock DockPanel.Dock="Top" Text="Presets" Style="{StaticResource SectionLabel}" Margin="0,12,0,8"/>
+          <WrapPanel x:Name="PresetList" DockPanel.Dock="Top">
+            <Button Content="Safe" Tag="safe" Click="PresetSafe" Margin="0,0,8,8"/>
+            <Button Content="Standard" Tag="standard" Click="PresetStandard" Margin="0,0,8,8"/>
+            <Button Content="Privacy" Tag="privacy" Click="PresetPrivacy" Margin="0,0,8,8"/>
+            <Button Content="OEM" Tag="oem" Click="PresetOem" Margin="0,0,8,8"/>
+            <Button Content="Full" Tag="full" Click="PresetFull" Margin="0,0,8,8"/>
+          </WrapPanel>
+          <TextBlock DockPanel.Dock="Top" Text="Intent" Style="{StaticResource SectionLabel}" Margin="0,4,0,8"/>
+          <WrapPanel x:Name="IntentList" DockPanel.Dock="Top">
+            <Button Content="Free disk" Tag="disk" Click="PresetDisk" Margin="0,0,8,8"/>
+            <Button Content="New laptop" Tag="new_pc" Click="PresetNewPc" Margin="0,0,8,8"/>
+            <Button Content="Debloat" Tag="debloat" Click="PresetDebloat" Margin="0,0,8,8"/>
+            <Button Content="AI tools" Tag="ai" Click="PresetAi" Margin="0,0,8,8"/>
+            <Button Content="Workstation" Tag="workstation" Click="PresetWork" Margin="0,0,8,8"/>
+          </WrapPanel>
+          <TextBlock DockPanel.Dock="Top" Text="Included" Style="{StaticResource SectionLabel}" Margin="0,4,0,8"/>
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="ModuleList"/>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+
+      <Border Grid.Column="1" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16">
+        <DockPanel>
+          <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="Results" Style="{StaticResource CardTitle}"/>
+              <TextBlock x:Name="Totals" Margin="0,4,0,0" Foreground="{StaticResource MutedFg}" Text="Checked: —"/>
+            </StackPanel>
+          </Grid>
+          <Grid>
+            <DataGrid x:Name="Grid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                      HorizontalGridLinesBrush="{StaticResource Border}"
+                      IsReadOnly="False" SelectionMode="Extended" Background="{StaticResource Card}"
+                      BorderThickness="0" FontFamily="Fira Sans, Segoe UI" RowHeight="36"
+                      AlternationCount="2" RowHeaderWidth="0"
+                      ColumnHeaderStyle="{StaticResource GridHeader}"
+                      RowStyle="{StaticResource GridRow}"
+                      CellStyle="{StaticResource GridCell}">
+              <DataGrid.Columns>
+                <DataGridTemplateColumn Width="96" CanUserSort="False">
+                  <DataGridTemplateColumn.HeaderStyle>
+                    <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource GridHeader}">
+                      <EventSetter Event="Click" Handler="CleanAllClick"/>
+                      <Setter Property="ToolTip" Value="Check or clear every row"/>
+                    </Style>
+                  </DataGridTemplateColumn.HeaderStyle>
+                  <DataGridTemplateColumn.Header>
+                    <CheckBox x:Name="CleanAllBox" Content="Clean?" IsThreeState="True" IsHitTestVisible="False" Focusable="False"/>
+                  </DataGridTemplateColumn.Header>
+                  <DataGridTemplateColumn.CellTemplate>
+                    <DataTemplate>
+                      <CheckBox IsChecked="{Binding Include, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Left" VerticalAlignment="Center" Focusable="False" Click="RowCleanClick"/>
+                    </DataTemplate>
+                  </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="150">
+                  <DataGridTextColumn.ElementStyle>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="{Binding Status, Converter={StaticResource StatusBrush}}"/>
+                      <Setter Property="FontWeight" Value="SemiBold"/>
+                      <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                  </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="What to do" Binding="{Binding NextStep}" IsReadOnly="True" Width="240"/>
+                <DataGridTextColumn Header="Risk" Binding="{Binding Risk}" IsReadOnly="True" Width="110">
+                  <DataGridTextColumn.ElementStyle>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="{Binding Risk, Converter={StaticResource RiskBrush}}"/>
+                      <Setter Property="FontWeight" Value="SemiBold"/>
+                      <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                  </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Module" Binding="{Binding Module}" IsReadOnly="True" Width="170"/>
+                <DataGridTextColumn Header="Item" Binding="{Binding Item}" IsReadOnly="True" Width="220"/>
+                <DataGridTextColumn Header="Size" Binding="{Binding SizeText}" SortMemberPath="Bytes" IsReadOnly="True" Width="90">
+                  <DataGridTextColumn.ElementStyle>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="FontFamily" Value="Fira Code, Cascadia Mono, Consolas"/>
+                      <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                  </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="What it does" Binding="{Binding Effect}" IsReadOnly="True" Width="260"/>
+                <DataGridTextColumn Header="Repercussions" Binding="{Binding Repercussions}" IsReadOnly="True" Width="260"/>
+                <DataGridTextColumn Header="Detail" Binding="{Binding Detail}" IsReadOnly="True" Width="300">
+                  <DataGridTextColumn.ElementStyle>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="{StaticResource MutedFg}"/>
+                      <Setter Property="VerticalAlignment" Value="Center"/>
+                    </Style>
+                  </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
+              </DataGrid.Columns>
+            </DataGrid>
+            <TextBlock x:Name="EmptyHint" Text="Scan to list what can be cleaned. Check the rows you want, then Dry-run."
+                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                       TextWrapping="Wrap" MaxWidth="420" Margin="24" Foreground="{StaticResource MutedFg}" IsHitTestVisible="False"/>
+          </Grid>
+        </DockPanel>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="2" Background="{StaticResource Card}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="6" Padding="16" Margin="0,12,0,8">
+      <StackPanel>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <StackPanel Orientation="Horizontal">
+            <Button Content="Scan" Style="{StaticResource PrimaryButton}" Click="ScanClick" Margin="0,0,8,0"/>
+            <Button Content="Dry-run" Click="DryRunClick" Margin="0,0,8,0"/>
+            <Button Content="Clean" Style="{StaticResource AccentButton}" Click="CleanClick"/>
+          </StackPanel>
+          <CheckBox x:Name="RestoreCheck" Grid.Column="1" Content="Create a restore point before Clean" VerticalAlignment="Center" Margin="16,0,0,0" IsChecked="True"/>
+        </Grid>
+        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+          <Button Content="Restart as Administrator" Click="ElevateClick" Margin="0,0,8,0"/>
+          <Button Content="Export report" Click="ExportClick" Margin="0,0,8,0"/>
+          <Button Content="Undo privacy" Click="UndoPrivacyClick" Margin="0,0,8,0"/>
+          <Button Content="Undo startup" Click="UndoChangesClick" Margin="0,0,8,0"/>
+          <Button Content="Schedule weekly" Click="ScheduleClick"/>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+    <Border Grid.Row="3" Background="{StaticResource Muted}" CornerRadius="4" Padding="12,8">
+      <TextBlock x:Name="StatusLine" Foreground="{StaticResource Fg}" TextWrapping="Wrap" Text="Ready. Scan lists items. Clean changes only checked rows, then re-scans."/>
+    </Border>
+  </Grid>
+</Window>

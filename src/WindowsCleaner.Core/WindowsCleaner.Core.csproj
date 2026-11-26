@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>WindowsCleaner</RootNamespace>
+    <AssemblyName>WindowsCleaner.Core</AssemblyName>
+    <Version>2.0.0</Version>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

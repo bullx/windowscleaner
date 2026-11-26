@@ -15,44 +15,33 @@ Desktop + CLI tool for **Windows 10/11** that:
 
 **Not** a background resident “optimizer.” Work runs only during Scan / Dry-run / Clean.
 
-## Stack decision (session note)
+## Stack
 
-- **Stay on Python** for this project (GUI + CLI + modules).
-- User cares most about **real system effects**, not UI polish.
-- Do **not** rewrite to C# / C++ / C or add a C# hybrid helper unless the user explicitly asks — same Win32 outcomes, much higher cost.
-- If they ever leave Python later: C# ≫ C++ ≫ C; not needed now.
+- **C# / .NET 10 / WPF** as of 2.0.0. The window is `src/WindowsCleaner.App`. Cleanup logic is `src/WindowsCleaner.Core` and does not reference WPF.
+- Real system effects still matter more than UI polish.
+- Do not add a second UI toolkit. Do not disable Defender or Windows Update.
 
 ## How to run
 
 ```powershell
 cd C:\Custom\Projects\PycharmProjects\windowscleaner
-python -m pip install -r requirements.txt
-
-# GUI (default) — module name only, NO .\ prefix
-python -m windowscleaner
-python main.py
-
-# CLI
-python -m windowscleaner --cli scan
-python -m windowscleaner --cli --elevate clean --profile standard -y
+dotnet build WindowsCleaner.slnx -c Release
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli scan
 ```
 
-Portable EXE: `.\build.ps1` → `dist\WindowsCleaner.exe`  
-Restart a running GUI after code changes — old process won’t pick them up.
+Portable EXE: `.\build.ps1` → `dist\WindowsCleaner.exe`. Restart a running GUI after code changes.
 
 ## Architecture
 
 ```
-main.py / windowscleaner/__main__.py
-  └─ ui/gui.py          # default light-theme Tk UI
-  └─ ui/cli.py          # Click + Rich (--cli)
-       └─ cleaner.py    # Cleaner + select_modules(profiles)
-            ├─ modules/*           # CleanModule.scan / .clean
-            ├─ modules/item_info.py  # effect + repercussions text
-            └─ utils/
-                 ├─ item_status.py   # Status / What to do + verify + history
-                 ├─ admin.py, registry.py, fs.py, size.py, restore_point.py
-                 ├─ item_status.py, report_export.py, privacy_undo.py, windows_info.py
+src/WindowsCleaner.App/Program.cs
+  └─ MainWindow          # WPF, light theme
+  └─ Cli.cs              # --cli
+       └─ Cleaner        # profiles + scan/clean/verify
+            ├─ *Module classes
+            ├─ Catalogs.g.cs     # allowlists + effect text
+            └─ ItemStatus, RegistryStore, Fs, PrivacyUndo, ChangeUndo
 ```
 
 ### Clean pipeline (must preserve)
@@ -69,7 +58,7 @@ main.py / windowscleaner/__main__.py
 
 `CleanReport.verify_counts` holds Fixed / Not fixed / … tallies for the GUI summary.
 
-### Core types (`modules/base.py`)
+### Core types (`src/WindowsCleaner.Core/Models.cs`)
 
 - `CleanModule` — `id`, `label`, `description`, `risk`, `requires_admin`, `default_enabled`
 - `CleanItem` — `effect`, `repercussions`, `bytes_estimate`, `requires_admin`, **`status`**, **`next_step`**
@@ -111,13 +100,13 @@ main.py / windowscleaner/__main__.py
 ### Bloatware and startup services (v1.3.0)
 
 - Human docs: README section “Debloat: default apps and startup services”. Security scope: `SECURITY.md`.
-- `bloatware` allowlist: `modules/bloatware.py` `BLOAT` (installed + provisioned). Store, Photos, Calculator, codecs, and Defender stay off the list.
-- `startup_services` allowlist: `modules/startup_services.py` `SERVICES`.
+- `bloatware` allowlist: `Catalogs.Bloat` (installed + provisioned). Store, Photos, Calculator, codecs, and Defender stay off the list.
+- `startup_services` allowlist: `Catalogs.StartupServices`.
   - Scan offers a service only when it exists and is not already Disabled. **Disabled** targets are offered if Automatic or currently running. **Manual** (`demand`) targets are offered only when Automatic, so features can still start an already-manual service.
   - Clean runs `sc stop` and `sc config start= disabled|demand`. Per-user services use id prefix `usvc:` and the template name plus `Name_<id>` instances.
   - Do not add Defender, Update, BITS, firewall, SmartScreen, audio, Wi-Fi, Bluetooth, Windows Hello, Store licensing, or Hyper-V / WSL (`vmcompute`, `HvHost`, `hns`, `LxssManager`). Do not duplicate `telemetry_services` or `perf_services` names.
 - `MANUAL_PRESET_IDS` (`perf_services`, `startup_services`) stay off in the **full** preset. Profile `debloat` is the explicit on-switch for bloat + OEM + startup services.
-- GUI copy for these rows is set on the `CleanItem` and reinforced in `modules/item_info.py`.
+- GUI copy for these rows is set on the `CleanItem` and reinforced from `Catalogs.ItemInfo`.
 
 ### Admin / status after Clean
 
@@ -152,55 +141,42 @@ main.py / windowscleaner/__main__.py
 - Bloatware: current-user `Get-AppxPackage` first; `-AllUsers` only when elevated
 - PyInstaller: do **not** `collect_all("rich")` (pulls IPython/numpy); keep excludes lean (`windowscleaner.spec`)
 
-### GUI (`ui/gui.py`)
+### GUI (`src/WindowsCleaner.App/MainWindow.xaml`)
 
-- Light theme (user requested; avoid dark default)
-- Default visible: Status, What to do, Module, Item, Size, What it does, Repercussions
-- **All columns `stretch=False`** so horizontal scrollbar works
-- Customize columns / resize / Shift+wheel horizontal scroll / header sort
-- Prefs: `%LOCALAPPDATA%\WindowsCleaner\ui_prefs.json` (auto-injects `status` / `next_step` if old prefs lack them)
-- Frozen EXE elevation: `sys.frozen` → relaunch same EXE with `runas` (`utils/admin.py`)
+- Light theme. Palette: background `#F8FAFC`, foreground `#0F172A`, primary `#1E3A5F`, accent `#059669`. Font: Fira Sans, then Segoe UI.
+- Columns: Clean?, Status, What to do, Risk, Module, Item, Size, What it does, Repercussions, Detail
+- Header click sorts. Column edges resize. The grid scrolls horizontally.
+- Elevation relaunches the same EXE with `runas` (`Admin.RelaunchAsAdmin`)
 
 ### Effect / repercussions text
 
-- Central map: `modules/item_info.py` → `enrich_result()` called from `Cleaner.scan/clean`
+- Central map: `Catalogs.ItemInfo` → `ItemText.Enrich` from `Cleaner.Scan` / `Clean`
 - Privacy repercussions keyed by setting id in `PRIVACY_REPERCUSSIONS`
 
 ## Dependencies
 
-`requirements.txt`: `rich`, `click`  
-(Tkinter is stdlib on Windows CPython. `psutil` was removed — unused.)
+.NET 10 SDK. The WPF app and the core library have no NuGet packages. Tests use xUnit.
 
 ## Build / distribute
 
-- `build.ps1` / `build.bat` → PyInstaller one-file `WindowsCleaner.exe`
-- Spec: `windowscleaner.spec`, `console=False`, `uac_admin=False` (in-app elevate)
+- `build.ps1` publishes a self-contained single-file `dist\WindowsCleaner.exe`
+- The manifest stays `asInvoker`. The app asks for Administrator with `runas` when you click Restart as Administrator.
 - Unsigned EXE → SmartScreen “Run anyway” for recipients
-- Rebuild EXE after status/verify changes if distributing
 
 ## Files agents usually touch
 
 | Change | Where |
 |--------|--------|
-| New cleanup target | new or existing `modules/*.py` + register in `modules/__init__.py` `all_modules()` |
-| Status / verify / history | `utils/item_status.py` + `cleaner.py` |
-| Effect/repercussion copy | `modules/item_info.py` |
-| Privacy registry keys | `modules/privacy.py` `SETTINGS` |
-| Privacy undo | `utils/privacy_undo.py` |
-| Report export | `utils/report_export.py` |
-| Edition / Home banner | `utils/windows_info.py` |
-| Bloat package list + provisioned | `modules/bloatware.py` `BLOAT` |
-| OEM AppX / winget | `modules/bloatware_oem.py` |
-| Startup Run / folder | `modules/startup_apps.py` |
-| Optional SysMain/WSearch | `modules/perf_services.py` |
-| Optional startup RAM services | `modules/startup_services.py` |
-| AI caches / chats / weights | `modules/ai_caches.py`, `ai_history.py`, `ai_models.py`, `ai_targets.py` |
-| App / dev caches, WSL compact | `modules/app_caches.py`, `dev_caches.py`, `dev_disks.py` |
-| Component store, old drivers, languages | `modules/system_reclaim.py`, `driver_store.py`, `windows_features.py` |
-| Services/tasks | `modules/telemetry_services.py` |
-| Profiles | `cleaner.py` `select_modules` |
-| UI behavior | `ui/gui.py` |
-| CLI | `ui/cli.py` |
+| New cleanup target | a `CleanModule` class + `ModuleCatalog.All()` |
+| Status / verify / history | `ItemStatus.cs` + `Cleaner.cs` |
+| Effect/repercussion copy | `Catalogs.ItemInfo` |
+| Privacy registry keys | `Catalogs.Privacy` |
+| Privacy undo | `PrivacyUndo` |
+| Bloat / OEM / startup services | `Catalogs.Bloat`, `Catalogs.OemAppx`, `Catalogs.WingetTargets`, `Catalogs.StartupServices` |
+| AI path allowlist | `AiPaths` in `AiModules.cs` |
+| Profiles | `ModuleCatalog.Select` |
+| UI | `MainWindow.xaml` |
+| CLI | `Cli.cs` |
 | Docs for humans | `README.md` |
 | Docs for agents | `CONTEXT.md` (this file) |
 
@@ -214,9 +190,6 @@ main.py / windowscleaner/__main__.py
 - Force-remove Edge / break WinRE / resize partitions
 - Reintroduce silent whole-module Admin skips (items must appear with Failed — Needs Admin)
 - Fake Clean success without verify, or remove Fixed / Not fixed / Still present
-- Set Treeview column `stretch=True` on all columns (breaks horizontal scroll)
-- Use `python -m .\windowscleaner\` — relative module paths are invalid; use `python -m windowscleaner`
-- Rewrite to C#/C++/hybrid “for better system commands” unless user explicitly requests
 - Commit secrets; this repo has no API keys by design
 
 ## Known UX truths to preserve
@@ -229,7 +202,7 @@ main.py / windowscleaner/__main__.py
 
 ## Version / status
 
-- App version: see `windowscleaner/__init__.py` (`__version__`)
-- Stack: Python 3.11+, Tk GUI, optional Rich CLI, PyInstaller portable build
+- App version: `AppInfo.Version` in `Models.cs` (2.0.0)
+- Stack: .NET 10, WPF, CLI in the same EXE
 - Project path: `C:\Custom\Projects\PycharmProjects\windowscleaner`
-- Human docs: `README.md` (status table + Fixed/verify) — keep in sync when Status meanings change
+- Human docs: `README.md` — keep in sync when Status meanings or module IDs change

@@ -1,0 +1,12 @@
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\bin\Release\net10.0-windows\WindowsCleaner.Core.deps.json
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\bin\Release\net10.0-windows\WindowsCleaner.Core.dll
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\bin\Release\net10.0-windows\WindowsCleaner.Core.pdb
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.AssemblyInfoInputs.cache
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.AssemblyInfo.cs
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.csproj.CoreCompileInputs.cache
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.sourcelink.json
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.dll
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\refint\WindowsCleaner.Core.dll
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\WindowsCleaner.Core.pdb
+C:\Custom\Projects\PycharmProjects\windowscleaner\src\WindowsCleaner.Core\obj\Release\net10.0-windows\ref\WindowsCleaner.Core.dll

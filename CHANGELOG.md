@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-10
+
+### Changed
+- The app is now C# on .NET 10. The window is WPF. Scan, Dry-run, Clean, verify, profiles, and the allowlists match the previous tool.
+- `dotnet test` covers profiles, status, driver parsing, and the AI path guard. It does not change the PC.
+
 ## [1.4.0] - 2026-10-12
 
 ### Added

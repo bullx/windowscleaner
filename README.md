@@ -8,14 +8,12 @@ Designed for **Windows 10 / 11**. Run as Administrator for full effect (privacy 
 
 ```powershell
 cd C:\Custom\Projects\PycharmProjects\windowscleaner
-python -m pip install -r requirements.txt
-
-# Correct module launch (do NOT use .\windowscleaner\)
-python -m windowscleaner
-
-# Or
-python main.py
+$env:PATH = "$env:LOCALAPPDATA\Microsoft\dotnet;" + $env:PATH
+dotnet build WindowsCleaner.slnx -c Release
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe
 ```
+
+`C:\Program Files\dotnet` is a runtime only, and Windows finds it before the .NET 10 SDK. The first line makes this terminal use the SDK in `%LOCALAPPDATA%\Microsoft\dotnet`. Run the build, then run the EXE as its own command. A portable EXE is `.\build.ps1`.
 
 In the GUI: pick modules (or **Safe / Standard / Privacy / OEM / Full**, or intent **Free disk / New laptop / Debloat / AI tools / Workstation**) → **Scan** → toggle **Clean?** (`[x]`/`[ ]`) per row → **Dry-run** → **Clean**.  
 Use **Restart as Administrator** when privacy/services/system cleanup must stick.
@@ -77,7 +75,7 @@ Startup-service rows say when to keep them (printing, Xbox, Remote Desktop, Phon
 
 `startup_services` does not list Windows Defender, Windows Update, BITS, firewall, SmartScreen, audio, Wi-Fi, Bluetooth, Windows Hello, Store licensing, or Hyper-V / WSL. SysMain and Windows Search stay in `perf_services`. DiagTrack and the other telemetry services stay in `telemetry_services`.
 
-The allowlists live in `windowscleaner/modules/bloatware.py` (`BLOAT`) and `windowscleaner/modules/startup_services.py` (`SERVICES`).
+The allowlists live in `src/WindowsCleaner.Core/Catalogs.g.cs` (`Bloat` and `StartupServices`).
 
 ## GUI features
 
@@ -90,10 +88,7 @@ The allowlists live in `windowscleaner/modules/bloatware.py` (`BLOAT`) and `wind
 - Edition honesty banner (Home may still send Required diagnostic data)
 - Extra confirmation when **Windows.old** is in Clean scope
 - Pre-Clean prompt lists Admin-needed modules by name
-- **Customize columns** — show/hide Clean?, Status, Risk, Module, Item, Size, etc.
-- Drag column edges to resize; **Shift + mouse wheel** scrolls sideways
-- Click a column header to sort; **Reset column widths** restores defaults
-- Column prefs saved under `%LOCALAPPDATA%\WindowsCleaner\ui_prefs.json`
+- Drag a column edge to resize. Click a header to sort. Shift + mouse wheel scrolls the table sideways.
 - Last Clean history saved under `%LOCALAPPDATA%\WindowsCleaner\last_clean.json` (powers Came back / Still open)
 - Privacy undo history: `%LOCALAPPDATA%\WindowsCleaner\privacy_undo.json`
 - After every real **Clean**, the app **re-scans** and sets **Fixed** / **Not fixed** / **Still present** from live state
@@ -123,20 +118,12 @@ Also normal:
 ## CLI
 
 ```powershell
-python -m windowscleaner --cli modules
-python -m windowscleaner --cli scan
-python -m windowscleaner --cli scan --profile disk --export report.json
-python -m windowscleaner --cli clean --dry-run
-python -m windowscleaner --cli --elevate clean --profile standard -y
-python -m windowscleaner --cli --elevate clean --profile full -y
-python -m windowscleaner --cli --elevate clean --profile oem -y
-python -m windowscleaner --cli --elevate clean --profile new_pc -y
-python -m windowscleaner --cli --elevate clean --profile debloat -y
-python -m windowscleaner --cli --elevate clean --only perf_services -y
-python -m windowscleaner --cli --elevate clean --only startup_services -y
-python -m windowscleaner --cli --elevate clean --only startup_apps -y
-python -m windowscleaner --cli clean --only privacy,tracking -y
-python -m windowscleaner --cli undo-privacy --dry-run
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli modules
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli scan
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli scan --profile disk --export report.json
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli clean --dry-run
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli --elevate clean --profile standard -y
+.\src\WindowsCleaner.App\bin\Release\net10.0-windows\WindowsCleaner.exe --cli undo-privacy --dry-run
 ```
 
 ## Distribute so anyone can run (no Python)
@@ -148,7 +135,6 @@ Best option for friends / non-technical users: a **single `.exe`**.
 ```powershell
 cd C:\Custom\Projects\PycharmProjects\windowscleaner
 .\build.ps1
-# or double-click build.bat
 ```
 
 Output:
@@ -166,8 +152,8 @@ No Python install required. Windows may show SmartScreen on unsigned EXEs — **
 
 | Method | Best for | Notes |
 |--------|----------|--------|
-| `WindowsCleaner.exe` / zip | Most people | Recommended |
-| Folder + `python -m windowscleaner` | Developers | Needs Python 3.11+ and `pip install -r requirements.txt` |
+| `WindowsCleaner.exe` / zip | Most people | Recommended. Self-contained; no .NET install on the other PC |
+| `dotnet build` + the project | Developers | Needs the .NET 10 SDK |
 | GitHub Release | Public project | Upload the zip from `dist\` as a Release asset (manual; no automated Release CI) |
 
 ## Disclaimer
@@ -184,7 +170,7 @@ No Python install required. Windows may show SmartScreen on unsigned EXEs — **
 - This tool does **not** disable Windows Defender or Windows Update, and avoids breaking Store / BitLocker.
 - Methods use documented Windows APIs (folders, registry policies, services, Task Scheduler, AppX, winget) — aligned with Win11Debloat / WinUtil / ShutUp10-style guides. No exploits.
 
-In the GUI: open **Disclaimer**. In the CLI: `python -m windowscleaner --cli disclaimer`.
+In the GUI: open **Disclaimer**. In the CLI: `WindowsCleaner.exe --cli disclaimer`.
 
 ## Safety notes
 
@@ -197,35 +183,20 @@ In the GUI: open **Disclaimer**. In the CLI: `python -m windowscleaner --cli dis
 ## Project layout
 
 ```
-windowscleaner/
-  modules/          # one cleaner per concern (+ item effect/repercussion text)
-                    # incl. startup_apps, startup_services, bloatware (provisioned), bloatware_oem, perf_services
-  utils/            # admin, fs, registry, sizes, restore point, item_status, report_export, privacy_undo
-  ui/gui.py         # light-theme desktop UI
-  ui/cli.py         # Rich + Click CLI
-  cleaner.py        # orchestrator + profiles + post-clean verify
-main.py
-CONTEXT.md          # agent briefing (read this in new sessions)
-plan.md             # improvement plan / decisions
-CHANGELOG.md
-SECURITY.md
-CONTRIBUTING.md
-LICENSE
-pyproject.toml
-tests/              # smoke tests (no live mutation)
-windowscleaner.spec # PyInstaller build
-build.ps1 / build.bat
-requirements.txt
-requirements-dev.txt
+src/WindowsCleaner.Core/   # modules, profiles, status, registry, files (no UI)
+src/WindowsCleaner.App/    # WPF window + CLI
+tests/WindowsCleaner.Core.Tests/
+WindowsCleaner.slnx
+build.ps1                  # self-contained publish
+CONTEXT.md                 # agent briefing
 ```
 
 ## Requirements
 
-- Windows 10/11  
-- Python 3.11+ (developers)  
-- Packages: `rich`, `click` (see `requirements.txt`); `pytest` for tests (`requirements-dev.txt`)
+- Windows 10/11
+- .NET 10 SDK to build. The published EXE does not need a separate runtime.
 
 ## For AI / coding agents
 
-See **[CONTEXT.md](CONTEXT.md)** for architecture, module map, design decisions, performance notes, Admin pitfalls, and what not to break.  
+See **[CONTEXT.md](CONTEXT.md)** for architecture, module map, design decisions, and what not to break.  
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** / **[SECURITY.md](SECURITY.md)** for contribution and disclosure notes.

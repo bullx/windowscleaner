@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "WindowsCleaner/2.0.0": {
+        "dependencies": {
+          "WindowsCleaner.Core": "2.0.0"
+        },
+        "runtime": {
+          "WindowsCleaner.dll": {}
+        }
+      },
+      "WindowsCleaner.Core/2.0.0": {
+        "runtime": {
+          "WindowsCleaner.Core.dll": {
+            "assemblyVersion": "2.0.0.0",
+            "fileVersion": "2.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "WindowsCleaner/2.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "WindowsCleaner.Core/2.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

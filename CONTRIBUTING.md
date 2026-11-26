@@ -5,8 +5,8 @@ Thanks for improving Windows Cleaner.
 ## Setup
 
 ```powershell
-python -m pip install -r requirements.txt -r requirements-dev.txt
-python -m windowscleaner
+dotnet build WindowsCleaner.slnx
+dotnet test WindowsCleaner.slnx
 ```
 
 ## Guidelines
@@ -15,14 +15,14 @@ python -m windowscleaner
 - Do not disable Windows Defender or `wuauserv`
 - Keep bloatware / OEM / startup apps / startup services / perf modules opt-in (`default_enabled=False`)
 - Do not add Defender, Windows Update, firewall, audio, Wi-Fi, Bluetooth, Windows Hello, or Hyper-V/WSL services to `startup_services`
-- Update `modules/item_info.py` when adding user-visible items
+- Update `Catalogs.g.cs` when adding user-visible allowlist rows or effect text
 - Keep `README.md` and `CONTEXT.md` in sync when Status meanings or module IDs change
-- Add or extend smoke tests under `tests/` (no live system mutation in CI)
+- Add tests under `tests/WindowsCleaner.Core.Tests` (no live system mutation)
 
 ## Tests
 
 ```powershell
-python -m pytest -q
+dotnet test WindowsCleaner.slnx
 ```
 
 ## Portable build
