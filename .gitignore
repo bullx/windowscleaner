@@ -26,3 +26,8 @@ _patch_*.py
 .pytest_cache/
 .coverage
 htmlcov/
+
+# .NET
+bin/
+obj/
+
